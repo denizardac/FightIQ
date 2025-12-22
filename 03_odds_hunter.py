@@ -4,81 +4,95 @@ import json
 import re
 import difflib
 import time
+import sys
 
-# --- AYARLAR ---
+# ==========================================
+# ⚙️ AYARLAR
+# ==========================================
 INPUT_FILE = "2_data.json"
 OUTPUT_FILE = "2_data_with_odds.json"
-UFC_LEAGUE_ID = "41875249"
-
-# Bu link bizi her zaman güncel adrese atar
 REDIRECT_URL = "https://cutt.ly/zrIT6E9d" 
+
+# Windows konsol UTF-8 ayarı
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except: pass
 
 class BetistEngine:
     def __init__(self):
         self.fighter_to_id = {} 
         self.base_domain = None
         self.base_url = None
+        self.active_league_id = None # Dinamik olarak bulunacak
         self.headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
             'X-Requested-With': 'XMLHttpRequest'
         }
 
     def resolve_current_domain(self):
-        """Redirect linkini takip edip güncel Betist adresini bulur."""
         print("   🕵️‍♂️ Resolving current Betist domain...")
         try:
-            # allow_redirects=True ile yönlendirmeyi takip et
-            # verify=False SSL hatalarını önler (bazen redirectlerde sertifika sorunu olur)
             session = requests.Session()
             resp = session.get(REDIRECT_URL, headers={'User-Agent': self.headers['User-Agent']}, timeout=15, allow_redirects=True, verify=False)
             
             final_url = resp.url
             print(f"      ↳ Redirected to: {final_url}")
             
-            # Domaini ayıkla (https://betist1573.com/...)
-            # Regex ile "betist" ve sonrasındaki sayıyı bulalım
             match = re.search(r'(betist\d+)', final_url)
             
             if match:
-                site_name = match.group(1) # örn: betist1573
-                # API subdomaini genellikle "bet." ile başlar
+                site_name = match.group(1) 
                 self.base_domain = f"bet.{site_name}.com"
                 self.base_url = f"https://{self.base_domain}/getdata.php"
-                
-                # Referer header'ını güncelle
                 self.headers['Referer'] = f"https://{self.base_domain}/"
                 print(f"   ✅ Target API set to: {self.base_url}")
                 return True
             else:
-                print("   ❌ Could not parse domain from redirect URL.")
-                # Fallback: Manuel bildiğimiz son adresi deneyelim
-                print("   ⚠️ Falling back to hardcoded domain...")
-                self.base_domain = "bet.betist1573.com"
+                print("   ⚠️ Could not parse domain. Trying default fallback...")
+                self.base_domain = "bet.betist1607.com" # Güncel fallback
                 self.base_url = f"https://{self.base_domain}/getdata.php"
                 return True
-                
         except Exception as e:
             print(f"   ❌ Domain resolution failed: {e}")
             return False
 
-    def clean_name(self, name):
-        return " ".join(name.lower().split())
+    def find_ufc_league_id(self):
+        """Sitedeki UFC/MMA liginin güncel ID'sini arar"""
+        print("   🔎 Searching for active UFC League ID...")
+        # Betist genelde 'tree' yapısı veya ana spor listesi üzerinden ligleri sunar
+        # Ancak en garantisi, bildiğimiz ID'yi kontrol etmek veya geniş bir arama yapmaktır.
+        # Şimdilik, eğer eski ID çalışmıyorsa, manuel bir "Günün Maçları" listesinden ID avlayalım.
+        
+        # Test için varsayılan ID'yi ve alternatifleri deneyelim
+        potential_ids = ["41875249", "41875250", "30582"] # Bilinen IDler
+        
+        # Sitedeki 'MMA' veya 'UFC' geçen ligleri bulmak için ana menü isteği (Opsiyonel ama karmaşık)
+        # Basit yöntem: Varsayılan ID ile bir istek atıp 'UFC' kelimesi dönüyor mu bakmak.
+        
+        self.active_league_id = "41875249" # Varsayılan olarak başla
+        return True
 
     def fetch_event_list(self):
         if not self.base_url: return
         
-        print(f"   📡 Fetching UFC Event List from {self.base_domain}...")
+        print(f"   📡 Fetching Odds from {self.base_domain} (ID: {self.active_league_id})...")
+        
         params = {
             'sec': 'ASIAN_LAYOUT',
             'subsec': 'REQUEST_GET_SCHEME_EVENTS',
-            'league_id[]': UFC_LEAGUE_ID,
+            'league_id[]': self.active_league_id,
             'layout_schema_code': 'single_line_betist_1x2',
             'selected_date_period': 'null'
         }
         try:
             resp = requests.get(self.base_url, params=params, headers=self.headers, timeout=15, verify=False)
+            
+            # --- DEBUG: Sitede ne var? ---
+            # Sitedeki isimleri ekrana basalım ki ID yanlış mı yoksa maç mı yok anlayalım
             soup = BeautifulSoup(resp.text, 'html.parser')
             rows = soup.find_all('tbody', class_='cont_odds_row')
+            
+            found_names = []
             
             count = 0
             for row in rows:
@@ -86,6 +100,7 @@ class BetistEngine:
                     name_span = row.find('span', class_='not_favorite_part')
                     if not name_span: continue
                     full_name_text = name_span.get_text(strip=True)
+                    found_names.append(full_name_text)
                     
                     count_cell = row.find('td', class_='m-bet-grid__cell_count')
                     if not count_cell: continue
@@ -102,12 +117,27 @@ class BetistEngine:
                                 self.fighter_to_id[clean_f] = event_id
                         count += 1
                 except: continue
-            print(f"   ✅ Successfully indexed {count} fights.")
+            
+            if count > 0:
+                print(f"   ✅ Successfully indexed {count} fights.")
+            else:
+                print("   ⚠️ No fights found in this League ID.")
+                print(f"   🔍 Raw Response Snippet: {resp.text[:200]}...") # Hata ayıklama için
+                
+            if len(found_names) > 0:
+                print("   📋 Available Fights on Site:")
+                for name in found_names[:5]: # İlk 5 maçı göster
+                    print(f"      - {name}")
+                    
         except Exception as e:
             print(f"   ❌ List fetch failed: {e}")
 
+    def clean_name(self, name):
+        return " ".join(name.lower().split())
+
     def get_event_id_smart(self, f1, f2):
         f1_clean = self.clean_name(f1)
+        # 1. Direkt Arama
         for db_name, ev_id in self.fighter_to_id.items():
             f1_parts = set(f1_clean.split())
             db_parts = set(db_name.split())
@@ -115,6 +145,7 @@ class BetistEngine:
             if len(intersection) >= len(f1_parts) - 1: 
                 return ev_id
         
+        # 2. Fuzzy Match
         all_db_names = list(self.fighter_to_id.keys())
         match = difflib.get_close_matches(f1_clean, all_db_names, n=1, cutoff=0.6)
         if match: return self.fighter_to_id[match[0]]
@@ -150,18 +181,15 @@ class BetistEngine:
                 label = match[0].strip()
                 odd = float(match[1])
                 if len(label) < 2 or label.replace('.','').isdigit(): continue
-                
                 if type_label not in ["Yes", "No", "Over", "Under", "Winner", "TimeProp", "RoundProp"]:
                     full_label = f"{type_label} - {label}"
                 else:
                     full_label = label
                 extracted_odds[full_label] = odd
-                
         return extracted_odds if extracted_odds else None
 
     def fetch_market_details(self, event_id, f1, f2):
         if not self.base_url: return None
-        
         url = f"{self.base_url}?sec=ASIAN_LAYOUT&subsec=REQUEST_GET_ADDITIONAL_MARKETS&event_id={event_id}"
         try:
             resp = requests.get(url, headers=self.headers, timeout=10, verify=False)
@@ -178,7 +206,6 @@ class BetistEngine:
                 "Winning Method", "Alternative Winning Method", "Winning Round",
                 "Winning Group of Rounds", "Gone in 60 Seconds", "Winning Round and Minute"
             ]
-            
             for target in target_markets:
                 odds = self.parse_complex_market(text, target, f1, f2)
                 if odds:
@@ -195,9 +222,9 @@ class BetistEngine:
 
 def main():
     import urllib3
-    urllib3.disable_warnings() # SSL uyarılarını sustur
+    urllib3.disable_warnings() 
     
-    print("--- 💰 BETIST AUTO-PILOT ENGINE ---")
+    print("--- 💰 STEP 3: ODDS HUNTER (DEBUG MODE) ---")
     
     try:
         with open(INPUT_FILE, "r", encoding="utf-8") as f:
@@ -208,22 +235,21 @@ def main():
 
     engine = BetistEngine()
     
-    # 1. Domaini Bul
     if not engine.resolve_current_domain():
-        print("❌ Critical Error: Could not resolve domain.")
+        print("❌ Critical: Cannot find Betist domain.")
         return
 
-    # 2. Listeyi Çek
+    engine.find_ufc_league_id()
     engine.fetch_event_list()
     
     found_count = 0
     for fight in data:
         f1, f2 = fight['fighters'][0], fight['fighters'][1]
-        print(f"\n🔍 {f1} vs {f2}")
+        print(f"\n🔍 Hunting Odds: {f1} vs {f2}")
         
         ev_id = engine.get_event_id_smart(f1, f2)
         if ev_id:
-            print(f"   ✅ ID: {ev_id}")
+            print(f"   ✅ ID Found: {ev_id}")
             odds = engine.fetch_market_details(ev_id, f1, f2)
             if odds:
                 fight['betist_odds'] = odds
@@ -232,12 +258,12 @@ def main():
             else:
                 print("      ⚠️ Markets empty.")
         else:
-            print("      ❌ ID Not Found")
+            print("      ❌ Match not found on betting site (Might be too far in future).")
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
         
-    print(f"\n📁 Saved to '{OUTPUT_FILE}'. Matches: {found_count}/{len(data)}")
+    print(f"\n📁 Odds data saved to '{OUTPUT_FILE}'. Matches: {found_count}/{len(data)}")
 
 if __name__ == "__main__":
     main()

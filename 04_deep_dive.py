@@ -4,10 +4,17 @@ from bs4 import BeautifulSoup
 import re
 import time
 from datetime import datetime
+import sys
 
-# --- AYARLAR ---
+# ==========================================
+# ⚙️ AYARLAR
+# ==========================================
 INPUT_FILE = "2_data_with_odds.json"
 OUTPUT_FILE = "2_data_final.json"
+
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except: pass
 
 class DeepStatsEngine:
     def __init__(self):
@@ -16,7 +23,6 @@ class DeepStatsEngine:
         }
 
     def time_to_seconds(self, time_str):
-        """04:20 formatını saniyeye çevirir"""
         try:
             if not ":" in time_str: return 0
             m, s = map(int, time_str.split(':'))
@@ -24,9 +30,8 @@ class DeepStatsEngine:
         except: return 0
 
     def calculate_age(self, dob_str):
-        """ 'Oct 23, 1990' formatından yaş hesaplar """
         try:
-            dob_str = " ".join(dob_str.split()) # Fazla boşlukları sil
+            dob_str = " ".join(dob_str.split()) 
             if not dob_str or dob_str == "--": return "N/A"
             dob = datetime.strptime(dob_str, "%b %d, %Y")
             today = datetime.today()
@@ -35,7 +40,6 @@ class DeepStatsEngine:
         except: return "N/A"
 
     def analyze_fighter_profile(self, url):
-        """Bir dövüşçünün tüm kariyer geçmişini ve fiziksel özelliklerini analiz eder"""
         if not url: return None
         
         try:
@@ -43,7 +47,7 @@ class DeepStatsEngine:
             soup = BeautifulSoup(resp.text, 'html.parser')
             
             stats = {
-                "name": "", # İsim kontrolü için
+                "name": "", 
                 "reach": "N/A",
                 "stance": "N/A",
                 "age": "N/A",
@@ -55,61 +59,59 @@ class DeepStatsEngine:
                 "win_by_dec": 0,
                 "first_round_finishes": 0,
                 "avg_fight_time_sec": 0,
+                "avg_fight_time": "0:00",
                 "last_5_results": [] 
             }
             
-            # --- 1. Fiziksel Özellikler (Header) ---
-            # İsim
             name_tag = soup.find('span', class_='b-content__title-highlight')
             if name_tag: stats['name'] = name_tag.get_text(strip=True)
 
-            # Detaylar kutusu (Height, Weight, Reach, STANCE, DOB)
             box_items = soup.find_all('li', class_='b-list__box-list-item')
             for item in box_items:
                 text = " ".join(item.get_text().split())
-                if "Reach:" in text:
-                    stats['reach'] = text.replace("Reach:", "").strip()
-                elif "STANCE:" in text:
-                    stats['stance'] = text.replace("STANCE:", "").strip()
-                elif "DOB:" in text:
-                    dob_raw = text.replace("DOB:", "").strip()
-                    stats['age'] = self.calculate_age(dob_raw)
+                if "Reach:" in text: stats['reach'] = text.replace("Reach:", "").strip()
+                elif "STANCE:" in text: stats['stance'] = text.replace("STANCE:", "").strip()
+                elif "DOB:" in text: stats['age'] = self.calculate_age(text.replace("DOB:", "").strip())
 
-            # --- 2. Geçmiş Maçlar Tablosunu Bul ---
             rows = soup.find_all('tr', class_='b-fight-details__table-row')
             
             total_seconds_fought = 0
             fight_count_for_time = 0
             
-            # İlk satır başlıktır, onu atla
             for row in rows[1:]:
                 cols = row.find_all('td')
                 if len(cols) < 10: continue
                 
                 try:
-                    result_text = cols[0].get_text(strip=True) # win/loss
-                    method = cols[7].get_text(strip=True) # KO/TKO
+                    result_raw = cols[0].get_text(strip=True).lower() 
+                    method_raw = cols[7].get_text(strip=True).lower()     
                     round_num = cols[8].get_text(strip=True)
                     time_str = cols[9].get_text(strip=True)
                     
                     stats["total_fights"] += 1
                     
                     if len(stats["last_5_results"]) < 5:
-                        stats["last_5_results"].append(result_text)
+                        stats["last_5_results"].append(result_raw)
 
-                    if result_text == 'win':
+                    # --- KAZANMA ANALİZİ (Daha Kapsamlı) ---
+                    if result_raw == 'win':
                         stats["wins"] += 1
-                        if "KO" in method or "TKO" in method:
+                        
+                        # KO/TKO Kontrolü
+                        if "ko" in method_raw or "tko" in method_raw:
                             stats["win_by_ko"] += 1
-                        elif "Sub" in method:
+                        # Submission Kontrolü (Rear Naked Choke vb. hepsi "sub" içermeyebilir ama genelde method sütununda yazar)
+                        # "sub" kelimesi veya Submission isimleri
+                        elif "sub" in method_raw or "choke" in method_raw or "armbar" in method_raw or "kimura" in method_raw:
                             stats["win_by_sub"] += 1
-                        elif "Dec" in method:
+                        # Karar Kontrolü (U-DEC, S-DEC, M-DEC, Decision)
+                        elif "dec" in method_raw:
                             stats["win_by_dec"] += 1
                         
-                        if round_num == "1" and ("KO" in method or "Sub" in method):
+                        if round_num == "1" and ("ko" in method_raw or "tko" in method_raw or "sub" in method_raw):
                             stats["first_round_finishes"] += 1
 
-                    elif result_text == 'loss':
+                    elif result_raw == 'loss':
                         stats["losses"] += 1
 
                     if round_num.isdigit():
@@ -121,19 +123,25 @@ class DeepStatsEngine:
                         
                 except Exception: continue
 
-            # Ortalamalar
+            # --- EKSİK VERİ TAMAMLAMA ---
+            # Eğer win_by_... toplamı wins'ten azsa, kalanı "Diğer/Karar" olarak ekleyebiliriz veya loglayabiliriz.
+            # Şimdilik oranları hesaplayalım.
+            
             if stats["wins"] > 0:
                 stats["ko_rate"] = round((stats["win_by_ko"] / stats["wins"]) * 100, 1)
                 stats["sub_rate"] = round((stats["win_by_sub"] / stats["wins"]) * 100, 1)
+                stats["dec_rate"] = round((stats["win_by_dec"] / stats["wins"]) * 100, 1)
             else:
                 stats["ko_rate"] = 0
                 stats["sub_rate"] = 0
+                stats["dec_rate"] = 0
                 
             if fight_count_for_time > 0:
                 avg_sec = total_seconds_fought / fight_count_for_time
                 m = int(avg_sec // 60)
                 s = int(avg_sec % 60)
                 stats["avg_fight_time"] = f"{m}:{s:02d}"
+                stats["avg_fight_time_sec"] = avg_sec
             else:
                 stats["avg_fight_time"] = "0:00"
 
@@ -144,20 +152,18 @@ class DeepStatsEngine:
             return None
 
 def main():
-    print("--- 🧬 STEP 2.5: DEEP STATS ENGINE (WITH STANCE/REACH) ---")
+    print("--- 🧬 STEP 4: DEEP STATS ENGINE (V2 FIXED) ---")
     
     try:
         with open(INPUT_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-    except: 
-        print(f"❌ '{INPUT_FILE}' not found.")
-        return
+    except: return
 
     engine = DeepStatsEngine()
     
     for fight in data:
         f1_name, f2_name = fight['fighters']
-        print(f"\n📊 Analyzing: {f1_name} vs {f2_name}")
+        print(f"\n📊 Analyzing Deep Stats: {f1_name} vs {f2_name}")
         
         urls = fight.get('urls', [])
         if len(urls) < 2:
@@ -169,11 +175,9 @@ def main():
         
         if deep1 and deep2:
             fight['deep_stats'] = [deep1, deep2]
-            
-            # --- DEBUG INFO ---
-            print(f"      ✅ {f1_name}: {deep1['age']} yrs | {deep1['stance']} | Reach: {deep1['reach']}")
-            print(f"      ✅ {f2_name}: {deep2['age']} yrs | {deep2['stance']} | Reach: {deep2['reach']}")
-            print(f"      🔥 Style: {deep1['ko_rate']}% KO vs {deep2['ko_rate']}% KO")
+            # Debug
+            print(f"      ✅ {f1_name}: {deep1['wins']} Wins (KO:{deep1['win_by_ko']} SUB:{deep1['win_by_sub']} DEC:{deep1['win_by_dec']})")
+            print(f"      ✅ {f2_name}: {deep2['wins']} Wins (KO:{deep2['win_by_ko']} SUB:{deep2['win_by_sub']} DEC:{deep2['win_by_dec']})")
         else:
             print("      ⚠️ Failed to extract deep stats.")
 
@@ -181,7 +185,6 @@ def main():
         json.dump(data, f, indent=4)
         
     print(f"\n📁 Final Data Saved to '{OUTPUT_FILE}'")
-    print("🚀 Ready for Step 3 (AI Analysis)")
 
 if __name__ == "__main__":
     main()

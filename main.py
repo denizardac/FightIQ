@@ -2,69 +2,89 @@ import subprocess
 import time
 import sys
 import os
+import json
+from datetime import datetime
 
-# --- FIGHTIQ: AUTONOMOUS MMA ANALYSIS PIPELINE ---
+# ==========================================
+# 🥊 FIGHTIQ: SYSTEM ORCHESTRATOR
+# ==========================================
 
-def run_step(script_name, description):
-    print(f"\n" + "="*60)
-    print(f"🚀 STARTING MODULE: {description}")
-    print(f"   📄 Script: {script_name}")
-    print("="*60)
+def run_module(script_name):
+    print(f"\n" + "═"*60)
+    print(f"🚀 LAUNCHING: {script_name}")
+    print("═"*60)
     
-    start_time = time.time()
-    
-    # Python scriptini çalıştır
-    # sys.executable, o an kullanılan python.exe'yi garanti eder (Virtualenv dostu)
+    start = time.time()
+    # Python yorumlayıcısı ile çalıştır
     result = subprocess.run([sys.executable, script_name], capture_output=False)
-    
-    duration = round(time.time() - start_time, 2)
+    duration = round(time.time() - start, 2)
     
     if result.returncode == 0:
-        print(f"\n✅ MODULE COMPLETE: {script_name} finished in {duration}s.")
+        print(f"✅ SUCCESS: {script_name} completed in {duration}s.")
         return True
     else:
-        print(f"\n❌ MODULE FAILED: {script_name} crashed (Code {result.returncode}).")
+        print(f"❌ FAILURE: {script_name} crashed (Code {result.returncode}).")
         return False
 
+def check_status():
+    """1_card.json dosyasından sistem durumunu okur"""
+    try:
+        with open("1_card.json", "r") as f:
+            data = json.load(f)
+            # Eğer status yoksa veya IDLE ise IDLE dön
+            return data.get("status", "IDLE")
+    except: return "IDLE"
+
 def main():
-    print("""
+    print(f"""
     ███████╗██╗ ██████╗ ██╗  ██╗████████╗██╗ ██████╗ 
     ██╔════╝██║██╔════╝ ██║  ██║╚══██╔══╝██║██╔═══██╗
     █████╗  ██║██║  ███╗███████║   ██║   ██║██║   ██║
     ██╔══╝  ██║██║   ██║██╔══██║   ██║   ██║██║▄▄ ██║
     ██║     ██║╚██████╔╝██║  ██║   ██║   ██║╚██████╔╝
     ╚═╝     ╚═╝ ╚═════╝ ╚═╝  ╚═╝   ╚═╝   ╚═╝ ╚══▀▀═╝ 
-          --- FIGHTIQ AUTONOMOUS SYSTEM v1.0 ---
+          --- SYSTEM START: {datetime.now().strftime('%Y-%m-%d %H:%M')} ---
     """)
     
-    # ADIM 0: Veritabanı Kontrolü (Yoksa oluşturur)
+    # 1. TEMEL KONTROLLER
+    # Veritabanı yoksa oluştur (Sadece ilk kurulumda çalışır)
     if not os.path.exists("fighters_db.json"):
-        print("⚠️ Fighter Database not found. Initializing Indexer...")
-        if not run_step("00_indexer.py", "Database Generator"): return
-    else:
-        print("📚 Database Check: OK (fighters_db.json exists)")
+        print("⚠️ Database missing. Running Indexer first...")
+        if not run_module("00_indexer.py"): return
 
-    # ADIM 1: Etkinlik Bulucu
-    if not run_step("01_event_radar.py", "Event Radar (UFCStats)"): return
+    # 2. TAKVİM VE DURUM KONTROLÜ
+    if not run_module("01_event_radar.py"): return
     
-    # ADIM 2: İstatistik Toplayıcı
-    if not run_step("02_stat_scout.py", "Stat Scout (Basic Data)"): return
+    status = check_status()
+    print(f"\n📊 DECISION MATRIX: System Mode is [{status}]")
     
-    # ADIM 3: Oran Avcısı (Betist API)
-    if not run_step("03_odds_hunter.py", "Odds Hunter (Betist API)"): return
+    # 3. SENARYO A: MAÇ HAFTASI (LIVE)
+    if status == "LIVE":
+        print("⚔️  MODE: WAR ROOM (Full Analysis)")
+        # Veri Toplama Hattı
+        if not run_module("02_stat_scout.py"): return
+        if not run_module("03_odds_hunter.py"): return
+        if not run_module("04_deep_dive.py"): return
+        
+        # Zeka ve Üretim Hattı
+        if not run_module("05_fight_brain.py"): return
+        if not run_module("06_visual_engine.py"): return
+        if not run_module("07_parlay_maker.py"): return
+        
+        # Yayın Hattı
+        run_module("08_social_director.py")
     
-    # ADIM 4: Derin Analiz (UFCStats Deep Dive)
-    if not run_step("04_deep_dive.py", "Deep Dive Engine (Advanced Stats)"): return
-    
-    # ADIM 5: Yapay Zeka Beyni (Gemini)
-    if os.path.exists("05_fight_brain.py"):
-        if not run_step("05_fight_brain.py", "FightIQ AI Brain"): return
+    # 4. SENARYO B: İÇERİK MODU (IDLE / CONTENT)
     else:
-        print("\n🚧 WAITING: '05_fight_brain.py' not found (Next Step).")
+        print("🎬 MODE: CONTENT STUDIO (Spotlight Generation)")
+        # Rastgele Efsane Seç ve Kartını Çiz
+        if run_module("09_spotlight_engine.py"):
+            # Yayınla
+            run_module("08_social_director.py")
 
-    print("\n" + "="*60)
-    print("🎉 PIPELINE FINISHED SUCCESSFULLY. CHECK '3_results.json'")
-    print("="*60)
+    print("\n" + "═"*60)
+    print(f"💤 SYSTEM SLEEPING. Next cycle scheduled via Cronjob.")
+    print("═"*60)
 
 if __name__ == "__main__":
     main()

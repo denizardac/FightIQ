@@ -1,4 +1,14 @@
+# Güvenlik (Asla yükleme!)
 .env
+
+# Python Gereksizleri
 __pycache__/
+*.pyc
+
+# Yerel Veriler (Sunucuda sıfırdan oluşsun)
 *.json
-posted_history.json
+!fighters_db.json  # Sadece veritabanı kalsın (opsiyonel, istersen bunu da gizle)
+
+# Loglar ve Görseller
+*.log
+visuals/

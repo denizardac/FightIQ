@@ -1,6 +1,9 @@
 requests
 beautifulsoup4
-google-generativeai
 fake-useragent
-tweepy
+google-generativeai
 python-dotenv
+tweepy
+matplotlib
+numpy
+pillow

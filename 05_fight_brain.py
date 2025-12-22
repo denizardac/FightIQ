@@ -3,145 +3,157 @@ import google.generativeai as genai
 import os
 import time
 import sys
+from dotenv import load_dotenv
 
 # ==========================================
-# 🔑 API KEY AYARI
+# ⚙️ KURULUM & GÜVENLİK
 # ==========================================
-# Buraya API Key'ini yapıştır
+load_dotenv()
 GEMINI_KEY = os.getenv("GEMINI_API_KEY")
+
 if not GEMINI_KEY:
-    raise ValueError("API Key not found in environment variables!") 
+    # Eğer .env okuyamazsa (Test amaçlı manuel giriş)
+    # GEMINI_KEY = "BURAYA_KEY_YAZABILIRSIN" 
+    print("❌ CRITICAL: 'GEMINI_API_KEY' not found in .env file!")
+    sys.exit(1)
 
 genai.configure(api_key=GEMINI_KEY)
 
-# ==========================================
-# ⚙️ AYARLAR
-# ==========================================
 INPUT_FILE = "2_data_final.json"
 OUTPUT_FILE = "3_results.json"
-# Kullanmak istediğimiz en güçlü model
-TARGET_MODEL = "models/gemini-2.5-pro" 
 
-def list_available_models():
-    """Hata durumunda mevcut modelleri listeler"""
-    print("\n⚠️ MODEL BULUNAMADI! Hesabındaki aktif modeller listeleniyor...")
-    try:
-        for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                print(f"   👉 {m.name}")
-        print("\n💡 Yukarıdaki isimlerden birini koddaki TARGET_MODEL kısmına yazmalısın.\n")
-    except Exception as e:
-        print(f"   ❌ Model listesi çekilemedi: {e}")
+# 🔥 MODEL LİSTESİ (Sırayla dener, asla 404 vermez)
+MODELS_TO_TRY = [
+    "models/gemini-2.5-pro",          # En Yenisi (Varsa efsane)
+    "models/gemini-1.5-pro-latest",   # Standart Pro
+    "models/gemini-1.5-pro",          # Alternatif isim
+    "models/gemini-pro"               # En garantisi (Eski ama çalışır)
+]
 
-def clean_json_string(text):
-    text = text.replace("```json", "").replace("```", "").strip()
-    return text
+# ==========================================
+# 🛠️ YARDIMCI FONKSİYONLAR
+# ==========================================
 
-def analyze_fight(fight_data, model_name):
+def get_working_model():
+    """Hesabında çalışan en güçlü modeli otomatik bulur"""
+    print("   🤖 Selecting best AI model...")
+    for model_name in MODELS_TO_TRY:
+        try:
+            model = genai.GenerativeModel(model_name)
+            # Ufak bir test isteği at
+            model.generate_content("Test", generation_config={"max_output_tokens": 1})
+            print(f"   ✅ Connected to: {model_name}")
+            return model
+        except Exception:
+            continue
+    
+    print("   ❌ FATAL: No working Gemini models found. Check API Key/Quota.")
+    sys.exit(1)
+
+def clean_json(text):
+    """Markdown temizleyici"""
+    return text.replace("```json", "").replace("```", "").strip()
+
+# Global Model instance (Tekrar tekrar başlatmamak için)
+active_model = None
+
+def analyze_matchup(fight_data):
+    global active_model
+    if not active_model:
+        active_model = get_working_model()
+
     f1, f2 = fight_data['fighters']
-    
-    # Veri Hazırlığı
     stats = fight_data.get('stats', [{}, {}])
-    deep_stats = fight_data.get('deep_stats', [{}, {}])
-    odds = fight_data.get('betist_odds', "No Odds Available")
-    news = fight_data.get('news', [])
+    deep = fight_data.get('deep_stats', [{}, {}])
+    odds = fight_data.get('betist_odds', "No Odds")
     
-    news_text = "No recent news."
-    if news and len(news) > 0:
-        f1_news = [n['title'] for n in news[0][:2]] if len(news[0]) > 0 else []
-        f2_news = [n['title'] for n in news[1][:2]] if len(news[1]) > 0 else []
-        news_text = f"{f1}: {f1_news} | {f2}: {f2_news}"
+    # Haber başlıklarını metne çevir
+    news_list = fight_data.get('news', [])
+    news_text = "No News"
+    if news_list and len(news_list) > 0:
+        n1 = [n['title'] for n in news_list[0][:2]] if len(news_list[0]) > 0 else []
+        n2 = [n['title'] for n in news_list[1][:2]] if len(news_list[1]) > 0 else []
+        news_text = f"{f1}: {n1} | {f2}: {n2}"
 
-    print(f"🧠 FIGHTIQ Processing: {f1} vs {f2}...")
+    print(f"🧠 Analyzing: {f1} vs {f2}...")
     
     try:
-        model = genai.GenerativeModel(model_name)
+        # --- MASTER PROMPT (CHECKLIST'E UYGUN) ---
+        prompt = f"""
+        ROLE: You are 'FightIQ', an elite MMA Analyst and Content Creator.
+
+        MATCHUP: {f1} vs {f2}
+        
+        [RED CORNER] {f1}: 
+        Stats: {json.dumps(stats[0])} | Deep Stats: {json.dumps(deep[0])}
+        
+        [BLUE CORNER] {f2}: 
+        Stats: {json.dumps(stats[1])} | Deep Stats: {json.dumps(deep[1])}
+        
+        ODDS: {json.dumps(odds)}
+        NEWS: {news_text}
+
+        --- MISSION ---
+        Generate a JSON output for our Weekly Content Calendar:
+
+        1. **violence_score (0-100):** Based on Finish Rates, SLpM and Aggression.
+        
+        2. **prediction:** {{"winner": "Name", "method": "KO/Sub/Dec", "confidence": 1-10}}
+        
+        3. **value_bets:** {{"pick": "Best Bet (e.g. Fighter A by KO)", "reason": "Short value explanation"}}
+        
+        4. **spotlight_stats (CRITICAL FOR VISUAL CARDS):**
+           Rate both fighters 0-100 on these attributes based on their stats (Estimate if needed):
+           "{f1}": {{"power": int, "grappling": int, "stamina": int, "chin": int, "technique": int, "one_liner": "Short nickname/style description"}}
+           "{f2}": {{"power": int, "grappling": int, "stamina": int, "chin": int, "technique": int, "one_liner": "Short nickname/style description"}}
+
+        5. **content_tweets (FOR WEEKLY SCHEDULE):** Write 3 viral tweets in ENGLISH:
+           - "analysis_tweet": Technical breakdown for Tuesday Deep Dive.
+           - "violence_tweet": Hype tweet for Thursday Violence Day (Focus on Violence Score).
+           - "betting_tweet": Betting focus for Friday Parlay.
+        
+        6. **spotlight_content (FOR WEDNESDAY):** Write a short, engaging "Fighter Spotlight" paragraph (max 280 chars) about the most interesting fighter in this matchup. Start with "🔦 SPOTLIGHT: [Name]".
+
+        Output ONLY valid JSON.
+        """
+        
+        response = active_model.generate_content(prompt, generation_config={"response_mime_type": "application/json", "temperature": 0.2})
+        return json.loads(clean_json(response.text))
+        
     except Exception as e:
-        print(f"   ❌ Model Başlatma Hatası: {e}")
-        return {"error": "Model init failed", "tweets": []}
-    
-    # --- 🔮 THE MASTER PROMPT (GLOBAL EDITION) ---
-    prompt = f"""
-    ROLE: You are 'FightIQ', an elite MMA Analyst and Sharp Bettor. You analyze stats coldly, ignore the hype, and hunt for market inefficiencies.
-
-    --- 🥊 MATCHUP DATA ---
-    RED CORNER: {f1}
-    - Basic Stats: {json.dumps(stats[0])}
-    - Deep Stats: {json.dumps(deep_stats[0])}
-    
-    BLUE CORNER: {f2}
-    - Basic Stats: {json.dumps(stats[1])}
-    - Deep Stats: {json.dumps(deep_stats[1])}
-    
-    📰 NEWS: {news_text}
-    💰 ODDS: {json.dumps(odds)}
-    
-    --- 🎯 MISSION ---
-    Analyze the data and return a JSON with:
-
-    1. **VIOLENCE_SCORE (0-100):** Based on Finish Rates, SLpM, and Defense. >85 means "Don't blink".
-    2. **STYLISTIC_MATCHUP:** Technical breakdown (e.g., "High Volume vs. Power Counter-Striker").
-    3. **PREDICTION:** Winner, Method, Round, Confidence (1-10).
-    4. **VALUE_BET_DETECTOR:** Find the mispriced line. Compare your calculated probability vs. the implied odds. Is the underdog live? Is the "Under 1.5 Rounds" prop too high?
-    5. **TWITTER_CONTENT (ENGLISH):** Write 3 viral tweets in a thread format.
-       - **Tweet 1 (The Hook):** Violence Score + The Narrative. Use emojis (🔥, 🩸).
-       - **Tweet 2 (The Data):** Deep stat analysis proving your point. (e.g. "X has 100% TDD, Y spams takedowns. Bad matchup.")
-       - **Tweet 3 (The Sharp Pick):** The Prediction & The Value Bet. Use hashtags: #UFC #MMA #GamblingTwitter #{f1.replace(' ','')} #{f2.replace(' ','')}
-
-    --- OUTPUT FORMAT ---
-    Return ONLY a valid JSON object: 
-    {{ "violence_score": int, "stylistic_analysis": string, "prediction": {{...}}, "value_bets": {{...}}, "tweets": [string, string, string] }}
-    """
-    
-    try:
-        # Temperature 0.3 ile daha tutarlı ve ciddi analizler yaptırıyoruz
-        response = model.generate_content(prompt, generation_config={"response_mime_type": "application/json", "temperature": 0.3})
-        return json.loads(clean_json_string(response.text))
-    except Exception as e:
-        if "404" in str(e):
-            list_available_models() # Hata alırsak listeyi göster
-            sys.exit(1) # Programı durdur ki kullanıcı düzeltsin
-        else:
-            print(f"   ⚠️ AI Brain Malfunction: {e}")
-            return {"error": str(e), "tweets": []}
+        print(f"   ⚠️ AI Analysis Error: {e}")
+        return None
 
 def main():
-    print(f"--- 🧠 STEP 3: FIGHTIQ NEURAL NETWORK (Model: {TARGET_MODEL}) ---")
+    print(f"--- 🧠 STEP 5: FIGHT BRAIN (ROBUST V2) ---")
     
-    if "BURAYA" in GEMINI_KEY:
-        print("❌ ERROR: Please insert your Gemini API Key in the script!")
-        return
-
     try:
-        with open(INPUT_FILE, "r", encoding="utf-8") as f:
-            fights = json.load(f)
-    except:
-        print(f"❌ '{INPUT_FILE}' not found.")
+        with open(INPUT_FILE, "r", encoding="utf-8") as f: fights = json.load(f)
+    except: 
+        print(f"❌ '{INPUT_FILE}' not found. Run Step 4 first.")
         return
 
-    final_results = []
+    results = []
+    print(f"📂 Processing {len(fights)} fights...")
     
-    print(f"📂 Loaded {len(fights)} fights. Starting analysis...")
+    # Model seçimini başta yap
+    get_working_model() 
     
     for i, fight in enumerate(fights):
-        ai_output = analyze_fight(fight, TARGET_MODEL)
+        output = analyze_matchup(fight)
+        if output:
+            results.append({
+                "matchup": f"{fight['fighters'][0]} vs {fight['fighters'][1]}",
+                "timestamp": time.strftime("%Y-%m-%d"),
+                "fight_brain_output": output
+            })
         
-        fight_result = {
-            "matchup": f"{fight['fighters'][0]} vs {fight['fighters'][1]}",
-            "timestamp": time.strftime("%Y-%m-%d %H:%M:%S"),
-            "fight_brain_output": ai_output
-        }
-        
-        final_results.append(fight_result)
-        
-        # API Limit koruması
-        print("   ⏳ Thinking... (4s)") 
-        time.sleep(4) 
+        # Rate limit koruması
+        if i < len(fights) - 1: time.sleep(2) 
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-        json.dump(final_results, f, indent=4)
-        
-    print(f"\n✅ MISSION COMPLETE! Results saved to '{OUTPUT_FILE}'")
+        json.dump(results, f, indent=4)
+    print(f"\n✅ AI Analysis Complete. Saved to '{OUTPUT_FILE}'")
 
 if __name__ == "__main__":
     main()
