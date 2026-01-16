@@ -69,7 +69,9 @@ def main():
         # Zeka ve Üretim Hattı
         if not run_module("05_fight_brain.py"): return
         if not run_module("06_visual_engine.py"): return
+        if not run_module("10_matchup_video_bridge.py"): return  # NEW: Generate matchup videos
         if not run_module("07_parlay_maker.py"): return
+        if not run_module("06b_ticket_generator.py"): return  # NEW: Generate betting tickets
         
         # Yayın Hattı
         run_module("08_social_director.py")

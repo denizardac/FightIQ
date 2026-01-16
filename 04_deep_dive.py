@@ -6,6 +6,11 @@ import time
 from datetime import datetime
 import sys
 
+# UTF-8 Encoding
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except: pass
+
 # ==========================================
 # ⚙️ AYARLAR
 # ==========================================
@@ -30,14 +35,30 @@ class DeepStatsEngine:
         except: return 0
 
     def calculate_age(self, dob_str):
+        """Calculate age with multiple date format support"""
         try:
-            dob_str = " ".join(dob_str.split()) 
+            dob_str = " ".join(dob_str.split()).strip()
             if not dob_str or dob_str == "--": return "N/A"
-            dob = datetime.strptime(dob_str, "%b %d, %Y")
+            
+            # Try multiple date formats
+            formats = ["%b %d, %Y", "%B %d, %Y", "%m/%d/%Y", "%Y-%m-%d"]
+            dob = None
+            for fmt in formats:
+                try:
+                    dob = datetime.strptime(dob_str, fmt)
+                    break
+                except: continue
+            
+            if not dob:
+                print(f"      ⚠️ Could not parse date: {dob_str}")
+                return "N/A"
+            
             today = datetime.today()
             age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
             return age
-        except: return "N/A"
+        except Exception as e:
+            print(f"      ⚠️ Age calculation error: {e}")
+            return "N/A"
 
     def analyze_fighter_profile(self, url):
         if not url: return None
@@ -83,8 +104,8 @@ class DeepStatsEngine:
                 if len(cols) < 10: continue
                 
                 try:
-                    result_raw = cols[0].get_text(strip=True).lower() 
-                    method_raw = cols[7].get_text(strip=True).lower()     
+                    result_raw = cols[0].get_text(strip=True).lower()  # Already lowercase
+                    method_raw = cols[7].get_text(strip=True).lower()  # Make lowercase
                     round_num = cols[8].get_text(strip=True)
                     time_str = cols[9].get_text(strip=True)
                     
@@ -93,26 +114,27 @@ class DeepStatsEngine:
                     if len(stats["last_5_results"]) < 5:
                         stats["last_5_results"].append(result_raw)
 
-                    # --- KAZANMA ANALİZİ (Daha Kapsamlı) ---
+                    # --- KAZANMA ANALİZİ (Case-insensitive, daha robust) ---
                     if result_raw == 'win':
                         stats["wins"] += 1
                         
-                        # KO/TKO Kontrolü
+                        # KO/TKO Kontrolü (case-insensitive)
                         if "ko" in method_raw or "tko" in method_raw:
                             stats["win_by_ko"] += 1
-                        # Submission Kontrolü (Rear Naked Choke vb. hepsi "sub" içermeyebilir ama genelde method sütununda yazar)
-                        # "sub" kelimesi veya Submission isimleri
-                        elif "sub" in method_raw or "choke" in method_raw or "armbar" in method_raw or "kimura" in method_raw:
+                        # Submission Kontrolü - daha geniş pattern matching
+                        elif any(term in method_raw for term in ["sub", "choke", "armbar", "kimura", "guillotine", "triangle"]):
                             stats["win_by_sub"] += 1
-                        # Karar Kontrolü (U-DEC, S-DEC, M-DEC, Decision)
+                        # Karar Kontrolü
                         elif "dec" in method_raw:
                             stats["win_by_dec"] += 1
                         
-                        if round_num == "1" and ("ko" in method_raw or "tko" in method_raw or "sub" in method_raw):
+                        # First round finish check
+                        if round_num == "1" and ("ko" in method_raw or "tko" in method_raw or "sub" in method_raw or "choke" in method_raw):
                             stats["first_round_finishes"] += 1
 
                     elif result_raw == 'loss':
                         stats["losses"] += 1
+                    # Handle draws, no contests, etc (don't count as win or loss)
 
                     if round_num.isdigit():
                         r = int(round_num)
@@ -154,10 +176,25 @@ class DeepStatsEngine:
 def main():
     print("--- 🧬 STEP 4: DEEP STATS ENGINE (V2 FIXED) ---")
     
+    # Robust file load with validation
+    if not os.path.exists(INPUT_FILE):
+        print(f"❌ ERROR: '{INPUT_FILE}' not found. Run Step 3 (odds_hunter) first.")
+        return
+    
+    # Check file age
+    file_age = time.time() - os.path.getmtime(INPUT_FILE)
+    if file_age > 24 * 3600:  # 24 hours
+        print(f"⚠️ WARNING: {INPUT_FILE} is {file_age/3600:.1f} hours old. Data may be stale.")
+    
     try:
         with open(INPUT_FILE, "r", encoding="utf-8") as f:
             data = json.load(f)
-    except: return
+    except json.JSONDecodeError as e:
+        print(f"❌ ERROR: {INPUT_FILE} contains invalid JSON: {e}")
+        return
+    except Exception as e:
+        print(f"❌ ERROR: Failed to load {INPUT_FILE}: {e}")
+        return
 
     engine = DeepStatsEngine()
     

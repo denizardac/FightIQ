@@ -5,6 +5,11 @@ import time
 import sys
 from dotenv import load_dotenv
 
+# UTF-8 Encoding
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+except: pass
+
 # ==========================================
 # ⚙️ KURULUM & GÜVENLİK
 # ==========================================
@@ -22,12 +27,12 @@ genai.configure(api_key=GEMINI_KEY)
 INPUT_FILE = "2_data_final.json"
 OUTPUT_FILE = "3_results.json"
 
-# 🔥 MODEL LİSTESİ (Sırayla dener, asla 404 vermez)
+# 🔥 MODEL LİSTESİ - EN GÜÇLÜ MODELLER (Betting Analysis için)
 MODELS_TO_TRY = [
-    "models/gemini-2.5-pro",          # En Yenisi (Varsa efsane)
-    "models/gemini-1.5-pro-latest",   # Standart Pro
-    "models/gemini-1.5-pro",          # Alternatif isim
-    "models/gemini-pro"               # En garantisi (Eski ama çalışır)
+    "models/gemini-2.5-flash",              # En yeni Gemini 2.5 (Aralık 2025)
+    "models/deep-research-pro-preview-1",   # Deep Research - Betting için ideal
+    "models/gemini-1.5-pro-002",            # Latest stable pro
+    "models/gemini-1.5-pro-latest",         # Fallback pro
 ]
 
 # ==========================================
@@ -127,29 +132,66 @@ def analyze_matchup(fight_data):
 def main():
     print(f"--- 🧠 STEP 5: FIGHT BRAIN (ROBUST V2) ---")
     
+    # Robust file load
+    if not os.path.exists(INPUT_FILE):
+        print(f"❌ ERROR: '{INPUT_FILE}' not found. Run Step 4 first.")
+        return
+    
     try:
-        with open(INPUT_FILE, "r", encoding="utf-8") as f: fights = json.load(f)
-    except: 
-        print(f"❌ '{INPUT_FILE}' not found. Run Step 4 first.")
+        with open(INPUT_FILE, "r", encoding="utf-8") as f: 
+            fights = json.load(f)
+    except json.JSONDecodeError as e:
+        print(f"❌ ERROR: Invalid JSON in {INPUT_FILE}: {e}")
         return
 
     results = []
+    failed_fights = []
     print(f"📂 Processing {len(fights)} fights...")
     
     # Model seçimini başta yap
     get_working_model() 
     
     for i, fight in enumerate(fights):
+        matchup_name = f"{fight['fighters'][0]} vs {fight['fighters'][1]}"
         output = analyze_matchup(fight)
-        if output:
-            results.append({
-                "matchup": f"{fight['fighters'][0]} vs {fight['fighters'][1]}",
-                "timestamp": time.strftime("%Y-%m-%d"),
-                "fight_brain_output": output
-            })
         
-        # Rate limit koruması
-        if i < len(fights) - 1: time.sleep(2) 
+        if output:
+            # Validate essential fields
+            required_fields = ['prediction', 'violence_score']
+            if all(field in output for field in required_fields):
+                results.append({
+                    "matchup": matchup_name,
+                    "timestamp": time.strftime("%Y-%m-%d"),
+                    "fight_brain_output": output
+                })
+                print(f"   ✅ Analysis complete")
+            else:
+                print(f"   ⚠️ WARNING: Incomplete AI output for {matchup_name}, retrying...")
+                # Retry once
+                output_retry = analyze_matchup(fight)
+                if output_retry and all(field in output_retry for field in required_fields):
+                    results.append({
+                        "matchup": matchup_name,
+                        "timestamp": time.strftime("%Y-%m-%d"),
+                        "fight_brain_output": output_retry
+                    })
+                    print(f"   ✅ Retry successful")
+                else:
+                    failed_fights.append(matchup_name)
+                    print(f"   ❌ Failed after retry")
+        else:
+            failed_fights.append(matchup_name)
+            print(f"   ❌ AI analysis failed for {matchup_name}")
+        
+        # Rate limit koruması (Deep models için daha uzun bekleme)
+        if i < len(fights) - 1: time.sleep(3)  # 3 saniye (config'ten alınabilir)
+    
+    # Summary
+    print(f"\n📊 SUMMARY:")
+    print(f"   ✅ Successful: {len(results)}/{len(fights)}")
+    if failed_fights:
+        print(f"   ❌ Failed: {len(failed_fights)}")
+        print(f"   Failed fights: {', '.join(failed_fights)}")
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4)

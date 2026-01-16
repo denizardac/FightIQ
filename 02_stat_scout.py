@@ -51,7 +51,8 @@ class SmartScraper:
         if clean_name in self.db:
             return self.db[clean_name]
         
-        matches = difflib.get_close_matches(clean_name, self.db.keys(), n=1, cutoff=0.6)
+        # Use higher cutoff for better accuracy (0.8 instead of 0.6)
+        matches = difflib.get_close_matches(clean_name, self.db.keys(), n=1, cutoff=0.8)
         if matches:
             found_name = matches[0]
             print(f"   💡 Fuzzy Match: '{name}' -> '{found_name}'")
@@ -108,21 +109,62 @@ class SmartScraper:
             print(f"      ⚠️ Stats Error: {e}")
             return {}
 
-    # --- 3. HABER ÇEKİCİ ---
+    # --- 3. HABER ÇEKİCİ (MULTI-SOURCE) ---
     def get_news(self, name):
+        """Çoklu kaynaklardan haber topla"""
+        all_news = []
+        
+        # Source 1: Google News RSS
         try:
             rss_url = f"https://news.google.com/rss/search?q={urllib.parse.quote(name)}+UFC&hl=en-US&gl=US&ceid=US:en"
             resp = requests.get(rss_url, headers=self._get_headers(), timeout=10)
             soup = BeautifulSoup(resp.content, 'xml')
-            news_items = []
-            for item in soup.find_all('item', limit=3):
-                news_items.append({
+            for item in soup.find_all('item', limit=2):
+                all_news.append({
                     "title": item.title.text,
                     "date": item.pubDate.text if item.pubDate else "N/A",
-                    "link": item.link.text if item.link else ""
+                    "link": item.link.text if item.link else "",
+                    "source": "Google News"
                 })
-            return news_items
-        except: return []
+        except: pass
+        
+        # Source 2: MMA Fighting RSS (dedicated MMA site)
+        try:
+            mma_rss = f"https://www.mmafighting.com/rss/index.xml"
+            resp = requests.get(mma_rss, headers=self._get_headers(), timeout=8)
+            soup = BeautifulSoup(resp.content, 'xml')
+            for item in soup.find_all('item'):
+                title = item.title.text if item.title else ""
+                # Only include if fighter name mentioned
+                if name.lower() in title.lower():
+                    all_news.append({
+                        "title": title,
+                        "date": item.pubDate.text if item.pubDate else "N/A",
+                        "link": item.link.text if item.link else "",
+                        "source": "MMA Fighting"
+                    })
+                    if len(all_news) >= 4: break
+        except: pass
+        
+        # Source 3: ESPN MMA RSS
+        try:
+            espn_rss = "https://www.espn.com/espn/rss/mma/news"
+            resp = requests.get(espn_rss, headers=self._get_headers(), timeout=8)
+            soup = BeautifulSoup(resp.content, 'xml')
+            for item in soup.find_all('item'):
+                title = item.title.text if item.title else ""
+                if name.lower() in title.lower():
+                    all_news.append({
+                        "title": title,
+                        "date": item.pubDate.text if item.pubDate else "N/A",
+                        "link": item.link.text if item.link else "",
+                        "source": "ESPN MMA"
+                    })
+                    if len(all_news) >= 5: break
+        except: pass
+        
+        # Return top 3 most recent
+        return all_news[:3] if all_news else []
 
 def main():
     print("--- STEP 2: STAT SCOUT (DATA MINING v2) ---")

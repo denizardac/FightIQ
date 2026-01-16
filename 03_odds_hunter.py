@@ -56,26 +56,91 @@ class BetistEngine:
             print(f"   ❌ Domain resolution failed: {e}")
             return False
 
+    def _test_league_id(self, league_id):
+        """Test if a league ID returns UFC/MMA content"""
+        try:
+            params = {
+                'sec': 'ASIAN_LAYOUT',
+                'subsec': 'REQUEST_GET_SCHEME_EVENTS',
+                'league_id[]': league_id,
+                'layout_schema_code': 'single_line_betist_1x2',
+                'selected_date_period': 'null'
+            }
+            resp = requests.get(self.base_url, params=params, headers=self.headers, timeout=10, verify=False)
+            
+            if resp.status_code != 200:
+                return False
+            
+            # Check if response contains UFC/MMA keywords
+            text = resp.text.lower()
+            # Look for fighter names or UFC/MMA keywords
+            ufc_indicators = ['ufc', 'mma', 'mixed martial', 'cont_odds_row']
+            
+            for indicator in ufc_indicators:
+                if indicator in text:
+                    # Also check if there's actual content (not empty league)
+                    if 'cont_odds_row' in text or len(resp.text) > 500:
+                        print(f"      ✅ League ID {league_id} appears valid (found '{indicator}')")
+                        return True
+            
+            return False
+        except Exception as e:
+            print(f"      ⚠️ Test failed for ID {league_id}: {e}")
+            return False
+    
     def find_ufc_league_id(self):
-        """Sitedeki UFC/MMA liginin güncel ID'sini arar"""
+        """Sitedeki UFC/MMA liginin güncel ID'sini dinamik olarak bulur"""
         print("   🔎 Searching for active UFC League ID...")
-        # Betist genelde 'tree' yapısı veya ana spor listesi üzerinden ligleri sunar
-        # Ancak en garantisi, bildiğimiz ID'yi kontrol etmek veya geniş bir arama yapmaktır.
-        # Şimdilik, eğer eski ID çalışmıyorsa, manuel bir "Günün Maçları" listesinden ID avlayalım.
         
-        # Test için varsayılan ID'yi ve alternatifleri deneyelim
-        potential_ids = ["41875249", "41875250", "30582"] # Bilinen IDler
+        if not self.base_url:
+            print("   ❌ Base URL not set")
+            return False
         
-        # Sitedeki 'MMA' veya 'UFC' geçen ligleri bulmak için ana menü isteği (Opsiyonel ama karmaşık)
-        # Basit yöntem: Varsayılan ID ile bir istek atıp 'UFC' kelimesi dönüyor mu bakmak.
+        # İmport config for known IDs
+        try:
+            import config
+            potential_ids = config.BETIST_KNOWN_LEAGUE_IDS
+        except:
+            potential_ids = ["41875249", "41875250", "41875251", "30582", "41875252"]
         
-        self.active_league_id = "41875249" # Varsayılan olarak başla
-        return True
+        print(f"   🧪 Testing {len(potential_ids)} known league IDs...")
+        
+        # Try known IDs first (fast path)
+        for test_id in potential_ids:
+            if self._test_league_id(test_id):
+                self.active_league_id = test_id
+                print(f"   ✅ Found valid UFC League ID: {test_id}")
+                return True
+        
+        # If none of the known IDs work, try to discover new ones
+        print("   🔍 Known IDs failed. Attempting discovery...")
+        
+        # Try sequential IDs around the known ones (brute force)
+        base_id = 41875249
+        for offset in range(-10, 20):  # Try IDs around the base
+            test_id = str(base_id + offset)
+            if test_id not in potential_ids:  # Skip already tested
+                if self._test_league_id(test_id):
+                    self.active_league_id = test_id
+                    print(f"   🎯 Discovered new UFC League ID: {test_id}")
+                    print(f"   💡 Consider adding {test_id} to config.BETIST_KNOWN_LEAGUE_IDS")
+                    return True
+        
+        print("   ❌ Could not find valid UFC League ID")
+        print("   💡 The betting site may have changed its structure")
+        return False
 
     def fetch_event_list(self):
-        if not self.base_url: return
+        """Fetch fight list from betting site"""
+        if not self.base_url:
+            print("   ❌ Base URL not configured")
+            return
         
-        print(f"   📡 Fetching Odds from {self.base_domain} (ID: {self.active_league_id})...")
+        if not self.active_league_id:
+            print("   ❌ No active league ID set")
+            return
+        
+        print(f"   📡 Fetching Odds from {self.base_domain} (League ID: {self.active_league_id})...")
         
         params = {
             'sec': 'ASIAN_LAYOUT',
@@ -119,10 +184,16 @@ class BetistEngine:
                 except: continue
             
             if count > 0:
-                print(f"   ✅ Successfully indexed {count} fights.")
+                print(f"   ✅ Successfully indexed {count} fight(s)")
+                print(f"   📋 Fighters mapped: {len(self.fighter_to_id)}")
             else:
-                print("   ⚠️ No fights found in this League ID.")
-                print(f"   🔍 Raw Response Snippet: {resp.text[:200]}...") # Hata ayıklama için
+                print("   ⚠️ No fights found in this League ID")
+                print(f"   🔍 Response status: {resp.status_code}")
+                print(f"   🔍 Response length: {len(resp.text)} bytes")
+                if len(resp.text) < 1000:
+                    print(f"   🔍 Full response: {resp.text}")
+                else:
+                    print(f"   🔍 Response snippet: {resp.text[:500]}...")
                 
             if len(found_names) > 0:
                 print("   📋 Available Fights on Site:")
@@ -136,24 +207,58 @@ class BetistEngine:
         return " ".join(name.lower().split())
 
     def get_event_id_smart(self, f1, f2):
+        """Improved fighter name matching with confidence scoring"""
         f1_clean = self.clean_name(f1)
-        # 1. Direkt Arama
+        f2_clean = self.clean_name(f2)
+        
+        # Import config for cutoff
+        try:
+            import config
+            primary_cutoff = config.FUZZY_MATCH_CUTOFF
+            relaxed_cutoff = config.FUZZY_MATCH_CUTOFF_RELAXED
+        except:
+            primary_cutoff = 0.8
+            relaxed_cutoff = 0.7
+        
+        # 1. Exact match (case-insensitive)
+        for db_name, ev_id in self.fighter_to_id.items():
+            if f1_clean == db_name or f2_clean == db_name:
+                print(f"      🎯 Exact match: {f1} -> {db_name}")
+                return ev_id
+        
+        # 2. Full name token match (all words must match)
         for db_name, ev_id in self.fighter_to_id.items():
             f1_parts = set(f1_clean.split())
             db_parts = set(db_name.split())
-            intersection = f1_parts.intersection(db_parts)
-            if len(intersection) >= len(f1_parts) - 1: 
+            
+            # All words from f1 must be in db_name
+            if f1_parts.issubset(db_parts) or db_parts.issubset(f1_parts):
+                print(f"      🎯 Full token match: {f1} -> {db_name}")
                 return ev_id
         
-        # 2. Fuzzy Match
+        # 3. Fuzzy Match (high cutoff)
         all_db_names = list(self.fighter_to_id.keys())
-        match = difflib.get_close_matches(f1_clean, all_db_names, n=1, cutoff=0.6)
-        if match: return self.fighter_to_id[match[0]]
+        match = difflib.get_close_matches(f1_clean, all_db_names, n=1, cutoff=primary_cutoff)
+        if match:
+            confidence = difflib.SequenceMatcher(None, f1_clean, match[0]).ratio()
+            print(f"      🔍 Fuzzy match: {f1} -> {match[0]} (confidence: {confidence:.2f})")
+            return self.fighter_to_id[match[0]]
         
-        f2_clean = self.clean_name(f2)
-        match2 = difflib.get_close_matches(f2_clean, all_db_names, n=1, cutoff=0.6)
-        if match2: return self.fighter_to_id[match2[0]]
-
+        # Try f2
+        match2 = difflib.get_close_matches(f2_clean, all_db_names, n=1, cutoff=primary_cutoff)
+        if match2:
+            confidence = difflib.SequenceMatcher(None, f2_clean, match2[0]).ratio()
+            print(f"      🔍 Fuzzy match: {f2} -> {match2[0]} (confidence: {confidence:.2f})")
+            return self.fighter_to_id[match2[0]]
+        
+        # 4. Relaxed fuzzy match (last resort)
+        match_relaxed = difflib.get_close_matches(f1_clean, all_db_names, n=1, cutoff=relaxed_cutoff)
+        if match_relaxed:
+            confidence = difflib.SequenceMatcher(None, f1_clean, match_relaxed[0]).ratio()
+            print(f"      ⚠️ Relaxed match: {f1} -> {match_relaxed[0]} (confidence: {confidence:.2f})")
+            return self.fighter_to_id[match_relaxed[0]]
+        
+        print(f"      ❌ No match found for: {f1} vs {f2}")
         return None
 
     def parse_complex_market(self, text, market_name, f1_name, f2_name):

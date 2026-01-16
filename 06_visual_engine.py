@@ -127,65 +127,286 @@ def create_radar_chart(fight_data):
     plt.close()
 
 # ==========================================
-# 2. STAT CARD ENGINE
+# 2. STAT CARD ENGINE (REDESIGNED for Phase 2)
 # ==========================================
-def create_stat_card(fighter_name, stats, one_liner, img_path=None, record="N/A"):
-    fig, ax = plt.subplots(figsize=(7, 9)) 
-    fig.patch.set_facecolor(COLORS['card_bg']); ax.set_facecolor(COLORS['card_bg']); ax.axis('off')
-
-    # --- FOTOĞRAF YERLEŞTİRME ---
-    if img_path:
+def create_stat_card(fighter_name, stats, one_liner, img_path=None, record="N/A", bg_path=None):
+    """
+    Creates a professional fighter stat card with brand identity.
+    
+    Phase 2 Redesign Features:
+    - Circular fighter photo at top-center
+    - Two-column stat layout
+    - Brand colors and typography
+    - FightIQ logo placement
+    """
+    # Import brand colors
+    try:
+        import config
+        COLORS = config.BRAND_COLORS
+        FONTS = config.FONT_PATHS
+    except:
+        # Fallback colors if config not available
+        COLORS = {
+            "primary": "#00FF41",
+            "secondary": "#FFD700",
+            "accent": "#FF0055",
+            "bg_card": "#1a1a1a",
+            "text_white": "#FFFFFF",
+            "text_light": "#EEEEEE",
+            "text_dark": "#AAAAAA"
+        }
+        FONTS = {
+            "headline": "fonts/BebasNeue-Regular.ttf",
+            "body_bold": "fonts/Roboto-Bold.ttf"
+        }
+    
+    # Helper: Load fonts with fallback
+    def load_font(font_key, size, fallback_bold=True):
+        # Try custom font
         try:
-            img = mpimg.imread(img_path)
-            new_ax = fig.add_axes([0.40, 0.05, 0.60, 0.60], anchor='SE', zorder=1)
-            new_ax.imshow(img); new_ax.axis('off')
-            text_x_align, bar_start_x, bar_width = 0.05, 0.05, 0.45
-            header_align, header_x = 'left', 0.05
-        except: img_path = None
-    
-    if not img_path:
-        text_x_align, bar_start_x, bar_width = 0.15, 0.15, 0.7
-        header_align, header_x = 'center', 0.5
-
-    # --- BAŞLIK VE REKOR ---
-    plt.text(header_x, 0.94, fighter_name.upper(), ha=header_align, va='center', 
-             color=COLORS['text'], fontsize=26, weight='black', transform=ax.transAxes)
-    
-    # 🔥 DÜZELTME: letter_spacing kaldırıldı 🔥
-    plt.text(header_x, 0.90, f"RECORD: {record}", ha=header_align, va='center', 
-             color=COLORS['record_text'], fontsize=12, weight='bold', transform=ax.transAxes)
-
-    plt.text(header_x, 0.86, f"\"{one_liner}\"", ha=header_align, va='center', 
-             color=COLORS['accent'], fontsize=14, style='italic', weight='bold', transform=ax.transAxes)
-
-    # --- YETENEK BARLARI ---
-    attributes = ['POWER', 'GRAPPLING', 'STAMINA', 'CHIN', 'TECHNIQUE']
-    y_pos = 0.72
-    bar_height = 0.02
-    
-    for attr in attributes:
-        score = stats.get(attr.lower(), 50)
-        plt.text(text_x_align, y_pos + 0.025, f"{attr}", ha='left', va='center', 
-                 color=COLORS['bar_text_label'], fontsize=12, weight='bold', transform=ax.transAxes)
-        plt.text(bar_start_x + bar_width + 0.02, y_pos + 0.0075, str(score), ha='left', va='center', 
-                 color=COLORS['bar_text_score'], fontsize=14, weight='black', transform=ax.transAxes)
-
-        rect_bg = patches.Rectangle((bar_start_x, y_pos), bar_width, bar_height, color=COLORS['bar_empty'], transform=ax.transAxes)
-        ax.add_patch(rect_bg)
-        fill_w = bar_width * (score / 100)
-        rect_fill = patches.Rectangle((bar_start_x, y_pos), fill_w, bar_height, color=COLORS['bar_fill'], transform=ax.transAxes)
-        ax.add_patch(rect_fill)
+            return ImageFont.truetype(FONTS.get(font_key, ""), size)
+        except:
+            pass
         
-        y_pos -= 0.11
-
-    # Logo
-    plt.text(0.5, 0.03, "FIGHTIQ SCOUTING REPORT", ha='center', color='white', fontsize=10, weight='bold', alpha=0.6, transform=ax.transAxes)
-
-    # Kaydet
+        # Try Windows system fonts
+        try:
+            if fallback_bold:
+                return ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", size)
+            else:
+                return ImageFont.truetype("C:/Windows/Fonts/arial.ttf", size)
+        except:
+            pass
+        
+        # Ultimate fallback
+        return ImageFont.load_default()
+    
+    # Dimensions
+    WIDTH = 1080
+    HEIGHT = 1350
+    
+    # Create image
+    img = Image.new('RGB', (WIDTH, HEIGHT), color=COLORS['bg_card'])
+    draw = ImageDraw.Draw(img)
+    
+    # === BACKGROUND (Nano Banana Integration) ===
+    if bg_path and os.path.exists(bg_path):
+        try:
+            # Load AI-generated background
+            bg_img = Image.open(bg_path).convert("RGB")
+            
+            # Resize to card dimensions
+            bg_img = bg_img.resize((WIDTH, HEIGHT), Image.LANCZOS)
+            
+            # Apply semi-transparent overlay to not overpower content
+            bg_img = bg_img.convert("RGBA")
+            overlay = Image.new('RGBA', (WIDTH, HEIGHT), COLORS['bg_card'] + (180,))  # 70% opacity
+            bg_img = Image.alpha_composite(bg_img, overlay)
+            
+            # Paste background
+            img.paste(bg_img.convert("RGB"), (0, 0))
+            
+            print(f"   ✨ Using custom background: {bg_path}")
+        except Exception as e:
+            print(f"   ⚠️ Could not load custom background: {e}")
+    else:
+        # Try to auto-detect background based on fighter name
+        if fighter_name:
+            safe_name = "".join([c for c in fighter_name if c.isalnum() or c in " -_"]).replace(" ", "_")
+            auto_bg_path = f"assets/backgrounds/{safe_name}.png"
+            
+            if os.path.exists(auto_bg_path):
+                try:
+                    bg_img = Image.open(auto_bg_path).convert("RGB")
+                    bg_img = bg_img.resize((WIDTH, HEIGHT), Image.LANCZOS)
+                    bg_img = bg_img.convert("RGBA")
+                    overlay = Image.new('RGBA', (WIDTH, HEIGHT), COLORS['bg_card'] + (180,))
+                    bg_img = Image.alpha_composite(bg_img, overlay)
+                    img.paste(bg_img.convert("RGB"), (0, 0))
+                    print(f"   ✨ Auto-detected custom background for {fighter_name}")
+                except:
+                    pass
+    
+    # === CIRCULAR FIGHTER PHOTO (Top-Center) ===
+    photo_diameter = 320
+    photo_y_pos = 80
+    
+    if img_path and os.path.exists(img_path):
+        try:
+            fighter_img = Image.open(img_path).convert("RGB")
+            
+            # Resize to square
+            size = min(fighter_img.size)
+            fighter_img = fighter_img.crop((
+                (fighter_img.width - size) // 2,
+                (fighter_img.height - size) // 2,
+                (fighter_img.width + size) // 2,
+                (fighter_img.height + size) // 2
+            ))
+            fighter_img = fighter_img.resize((photo_diameter, photo_diameter), Image.LANCZOS)
+            
+            # Create circular mask
+            mask = Image.new('L', (photo_diameter, photo_diameter), 0)
+            mask_draw = ImageDraw.Draw(mask)
+            mask_draw.ellipse((0, 0, photo_diameter, photo_diameter), fill=255)
+            
+            # Create circular photo
+            circular_photo = Image.new('RGBA', (photo_diameter, photo_diameter), (0, 0, 0, 0))
+            circular_photo.paste(fighter_img, (0, 0))
+            circular_photo.putalpha(mask)
+            
+            # Add glow border
+            glow_diameter = photo_diameter + 12
+            glow_img = Image.new('RGBA', (glow_diameter, glow_diameter), (0, 0, 0, 0))
+            glow_draw = ImageDraw.Draw(glow_img)
+            # Draw glow ring
+            hex_to_rgb = lambda h: tuple(int(h.lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+            glow_color = hex_to_rgb(COLORS['primary']) + (255,)
+            glow_draw.ellipse((0, 0, glow_diameter, glow_diameter), outline=glow_color, width=6)
+            
+            # Paste on main image
+            photo_x_pos = (WIDTH - glow_diameter) // 2
+            img.paste(glow_img, (photo_x_pos, photo_y_pos - 6), glow_img)
+            img.paste(circular_photo, (photo_x_pos + 6, photo_y_pos), circular_photo)
+            
+        except Exception as e:
+            print(f"Warning: Could not load fighter image: {e}")
+            img_path = None
+    
+    # === FIGHTER NAME (Below Photo) ===
+    name_y_pos = photo_y_pos + photo_diameter + 40
+    font_name = load_font("headline", 64, True)
+    
+    draw.text((WIDTH // 2, name_y_pos), fighter_name.upper(), 
+              font=font_name, fill=COLORS['text_white'], anchor="mt")
+    
+    # === RECORD (Below Name) ===
+    record_y_pos = name_y_pos + 80
+    font_record = load_font("body_bold", 28)
+    
+    draw.text((WIDTH // 2, record_y_pos), f"RECORD: {record}", 
+              font=font_record, fill=COLORS['text_dark'], anchor="mt")
+    
+    # === ONE-LINER (Tagline) ===
+    tagline_y_pos = record_y_pos + 50
+    font_tagline = load_font("body_bold", 32)
+    
+    draw.text((WIDTH // 2, tagline_y_pos), f'"{one_liner}"', 
+              font=font_tagline, fill=COLORS['primary'], anchor="mt", 
+              align="center")
+    
+    # === SEPARATOR LINE ===
+    separator_y = tagline_y_pos + 60
+    separator_margin = 120
+    draw.line([(separator_margin, separator_y), (WIDTH - separator_margin, separator_y)],
+              fill=COLORS['primary'], width=3)
+    
+    # === STATS (Two-Column Layout) ===
+    stats_start_y = separator_y + 60
+    
+    # Get stats
+    attributes = {
+        'POWER': stats.get('power', 50),
+        'GRAPPLING': stats.get('grappling', 50),
+        'STAMINA': stats.get('stamina', 50),
+        'CHIN': stats.get('chin', 50),
+        'TECHNIQUE': stats.get('technique', 50)
+    }
+    
+    # Two columns
+    left_stats = ['POWER', 'STAMINA', 'TECHNIQUE']
+    right_stats = ['GRAPPLING', 'CHIN']
+    
+    font_stat_label = load_font("body_bold", 24)
+    font_stat_value = load_font("headline", 56, True)
+    
+    # Left column
+    x_left = 140
+    y_pos = stats_start_y
+    for stat_name in left_stats:
+        value = attributes[stat_name]
+        
+        # Label
+        draw.text((x_left, y_pos), stat_name, 
+                  font=font_stat_label, fill=COLORS['text_light'], anchor="lt")
+        
+        # Value (large number)
+        draw.text((x_left, y_pos + 30), str(value), 
+                  font=font_stat_value, fill=COLORS['secondary'], anchor="lt")
+        
+        # Progress bar
+        bar_y = y_pos + 95
+        bar_width = 320
+        bar_height = 8
+        
+        # Background bar
+        draw.rectangle([x_left, bar_y, x_left + bar_width, bar_y + bar_height],
+                       fill='#333333')
+        
+        # Filled bar
+        fill_width = int(bar_width * (value / 100))
+        draw.rectangle([x_left, bar_y, x_left + fill_width, bar_y + bar_height],
+                       fill=COLORS['primary'])
+        
+        y_pos += 150
+    
+    # Right column
+    x_right = 580
+    y_pos = stats_start_y
+    for stat_name in right_stats:
+        value = attributes[stat_name]
+        
+        # Label
+        draw.text((x_right, y_pos), stat_name, 
+                  font=font_stat_label, fill=COLORS['text_light'], anchor="lt")
+        
+        # Value
+        draw.text((x_right, y_pos + 30), str(value), 
+                  font=font_stat_value, fill=COLORS['secondary'], anchor="lt")
+        
+        # Progress bar
+        bar_y = y_pos + 95
+        bar_width = 320
+        bar_height = 8
+        
+        draw.rectangle([x_right, bar_y, x_right + bar_width, bar_y + bar_height],
+                       fill='#333333')
+        
+        fill_width = int(bar_width * (value / 100))
+        draw.rectangle([x_right, bar_y, x_right + fill_width, bar_y + bar_height],
+                       fill=COLORS['primary'])
+        
+        y_pos += 150
+    
+    # === LOGO/BRANDING (Bottom) ===
+    logo_y = HEIGHT - 80
+    font_logo = load_font("headline", 36, True)
+    
+    # Try to load logo image (if exists)
+    logo_path = "assets/fightiq_logo.png"
+    if os.path.exists(logo_path):
+        try:
+            logo_img = Image.open(logo_path).convert("RGBA")
+            logo_img.thumbnail((200, 60), Image.LANCZOS)
+            logo_x = (WIDTH - logo_img.width) // 2
+            img.paste(logo_img, (logo_x, logo_y - 30), logo_img)
+        except:
+            # Text fallback
+            draw.text((WIDTH // 2, logo_y), "FIGHTIQ SCOUTING REPORT", 
+                      font=font_logo, fill=COLORS['text_dark'], anchor="mt")
+    else:
+        # Text logo
+        draw.text((WIDTH // 2, logo_y), "FIGHTIQ", 
+                  font=font_logo, fill=COLORS['primary'], anchor="mt")
+        
+        font_subtitle = load_font("body_bold", 18)
+        draw.text((WIDTH // 2, logo_y + 45), "SCOUTING REPORT", 
+                  font=font_subtitle, fill=COLORS['text_dark'], anchor="mt")
+    
+    # === SAVE ===
     safe_name = fighter_name.replace(" ", "_")
     filename = f"{OUTPUT_DIR}/Card_{safe_name}.png"
-    plt.savefig(filename, facecolor=COLORS['card_bg'], dpi=120, bbox_inches='tight')
-    plt.close()
+    img.save(filename, "PNG")
+    print(f"   ✅ Created: {filename}")
 
 def main():
     print("--- 🎨 STEP 6: VISUAL ENGINE (DESIGN & CLEAN) ---")

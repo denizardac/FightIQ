@@ -57,16 +57,80 @@ class SocialDirector:
             if not os.path.exists(os.path.join(FILES["visuals"], target)): target = f"Card_{safe_f2}.png"
         path = os.path.join(FILES["visuals"], target)
         return path if os.path.exists(path) else None
+    
+    def find_video(self, f1, f2, video_type="Matchup"):
+        """Find matchup video in visuals directory"""
+        safe_f1 = "".join([c for c in f1 if c.isalnum() or c==' ']).replace(' ', '_').lower()
+        safe_f2 = "".join([c for c in f2 if c.isalnum() or c==' ']).replace(' ', '_').lower()
+        
+        # Try both name orders
+        patterns = [
+            f"Reel_{video_type}_{safe_f1}_vs_{safe_f2}.mp4",
+            f"Reel_{video_type}_{safe_f2}_vs_{safe_f1}.mp4"
+        ]
+        
+        for pattern in patterns:
+            path = os.path.join(FILES["visuals"], pattern)
+            if os.path.exists(path):
+                return path
+        return None
+    
+    def find_ticket(self, slip_type):
+        """Find betting ticket image"""
+        target = f"Ticket_{slip_type.capitalize()}.png"
+        path = os.path.join(FILES["visuals"], target)
+        return path if os.path.exists(path) else None
 
-    def post_tweet(self, text, img_path=None, reply_to_id=None):
+    def post_tweet(self, text, media_path=None, reply_to_id=None, poll_options=None, poll_duration_minutes=None):
         print(f"\n🐦 POSTING (Reply: {reply_to_id}):\n{text[:60]}...")
         try:
             media_id = None
-            if img_path and self.api_v1:
-                media = self.api_v1.media_upload(filename=img_path)
+            if media_path and self.api_v1:
+                # Determine media type
+                if media_path.lower().endswith(".mp4"):
+                    print(f"   🎥 Uploading Video: {media_path}")
+                    # Use chunked upload for video
+                    media = self.api_v1.media_upload(filename=media_path, media_category='TWEET_VIDEO', chunked=True)
+                else:
+                    media = self.api_v1.media_upload(filename=media_path)
+                
                 media_id = media.media_id
             
-            resp = self.client.create_tweet(text=text, media_ids=[media_id] if media_id else None, in_reply_to_tweet_id=reply_to_id)
+            # Construct Poll args
+            poll_args = {}
+            if poll_options:
+                poll_args['poll_options'] = poll_options
+                poll_args['poll_duration_minutes'] = poll_duration_minutes or 24*60 # Default 24h
+            
+            # TWITTER API LIMITATION: Cannot have both poll and media in same tweet
+            # Solution: If poll exists, post it first, then reply with media
+            if poll_options and media_id:
+                print("   ⚠️ Poll + Media detected - posting as thread")
+                # Tweet 1: Text + Poll (no media)
+                resp = self.client.create_tweet(
+                    text=text,
+                    in_reply_to_tweet_id=reply_to_id,
+                    **poll_args
+                )
+                first_tweet_id = resp.data['id']
+                print(f"   🚀 Poll tweet sent! ID: {first_tweet_id}")
+                
+                # Tweet 2: Media as reply (no text needed, just video)
+                resp2 = self.client.create_tweet(
+                    text="",  # Empty or just emoji
+                    media_ids=[media_id],
+                    in_reply_to_tweet_id=first_tweet_id
+                )
+                print(f"   🎥 Video reply sent! ID: {resp2.data['id']}")
+                return first_tweet_id  # Return poll tweet ID
+            
+            # Normal case: Either poll OR media (not both)
+            resp = self.client.create_tweet(
+                text=text, 
+                media_ids=[media_id] if media_id else None, 
+                in_reply_to_tweet_id=reply_to_id,
+                **poll_args
+            )
             print(f"   🚀 Sent! ID: {resp.data['id']}")
             return resp.data['id']
         except Exception as e:
@@ -89,8 +153,18 @@ class SocialDirector:
 
             print(f"🚀 Posting Spotlight Thread ({len(thread_texts)} tweets)...")
             
-            # 1. Tweet (Resimli)
-            last_id = self.post_tweet(thread_texts[0], data['visual_path'])
+            # 1. Tweet (Video varsa video, yoksa resim)
+            media_file = data.get('video_path') if data.get('video_path') else data.get('visual_path')
+            
+            # Extract Poll Options
+            poll_options = data.get('poll_options')
+            
+            last_id = self.post_tweet(
+                thread_texts[0], 
+                media_path=media_file, 
+                poll_options=poll_options,
+                poll_duration_minutes=1440
+            )
             
             if last_id:
                 self.save_history(uid)
@@ -99,36 +173,55 @@ class SocialDirector:
                     time.sleep(5) # Biraz bekle
                     last_id = self.post_tweet(txt, reply_to_id=last_id)
                 
-                os.remove(FILES["spotlight"]) # Temizlik
+                # Dosyayı silmek yerine saklayalım test için, ya da silelim
+                # os.remove(FILES["spotlight"]) 
                 
         except Exception as e: print(f"❌ Spotlight Error: {e}")
 
     # --- DİĞER FONKSİYONLAR (AYNI KALACAK) ---
     def post_parlays(self):
-        # (Önceki kodun aynısı)
+        """Post parlay slips with visual tickets"""
         try:
             with open(FILES["parlays"], "r") as f: parlays = json.load(f)
         except: return
         uid = f"PARLAY_{datetime.today().strftime('%Y_%W')}"
         if uid in self.history: return
-        tweets = []
-        safe = parlays.get('safe_slip', [])
-        if safe: tweets.append("💰 FIGHTIQ SAFE SLIP 💰\n\n" + "\n".join([f"✅ {x['pick']}" for x in safe[:4]]) + "\n\n#UFC #Betting")
-        viol = parlays.get('violence_slip', [])
-        if viol: tweets.append("🩸 VIOLENCE SLIP 🩸\n\n" + "\n".join([f"💥 {x['match']}: {x['pick']}" for x in viol[:3]]) + "\n\n#UFC #Violence")
-        val = parlays.get('value_slip', [])
-        if val: tweets.append("💎 VALUE SLIP 💎\n\n" + "\n".join([f"🚀 {x['match']}: {x['pick']}" for x in val[:3]]) + "\n\n#UFC #Value")
+        
+        # NEW: Build thread with ticket images
+        slip_configs = [
+            ('safe_slip', 'safe', "💰 This week's SAFE SLIP is LOADED. Tap for the breakdown. 🎯 #UFC #Betting"),
+            ('violence_slip', 'violence', "🩸 VIOLENCE SLIP: Finish guaranteed. Early KO/SUB expected. 💥 #UFC #Betting"),
+            ('value_slip', 'value', "💎 VALUE SLIP: Sharp money detected. The books got this wrong. 🚀 #UFC #Betting")
+        ]
         
         last_id = None
-        if tweets:
-            last_id = self.post_tweet(tweets[0])
-            self.save_history(uid)
-            for t in tweets[1:]:
+        posted_count = 0
+        
+        for slip_key, slip_type, caption in slip_configs:
+            slip_data = parlays.get(slip_key, [])
+            if not slip_data:
+                continue
+            
+            # Find ticket image
+            ticket_img = self.find_ticket(slip_type)
+            
+            if ticket_img:
+                # Post with ticket image
+                tweet_id = self.post_tweet(caption, media_path=ticket_img, reply_to_id=last_id)
+            else:
+                # Fallback to text-only (old behavior)
+                tweet_text = f"{caption}\n\n" + "\n".join([f"✅ {x['pick']}" for x in slip_data[:4]])
+                tweet_id = self.post_tweet(tweet_text, reply_to_id=last_id)
+            
+            if tweet_id:
+                if posted_count == 0:
+                    self.save_history(uid)
+                last_id = tweet_id
+                posted_count += 1
                 time.sleep(5)
-                last_id = self.post_tweet(t, reply_to_id=last_id)
 
     def post_live_content(self, t_type, v_type, limit):
-        # (Önceki kodun aynısı)
+        """Post live fight week content with video preference"""
         try:
             with open(FILES["results"], "r") as f: results = json.load(f)
         except: return
@@ -141,8 +234,15 @@ class SocialDirector:
             brain = item.get('fight_brain_output', {})
             text = brain.get('spotlight_content', '') if t_type == "spotlight" else brain.get('content_tweets', {}).get(t_type, '')
             f1, f2 = match.split(" vs ")
-            img = self.find_image(f1, f2, v_type)
-            if text and self.post_tweet(text, img):
+            
+            # NEW: Prefer video over image for radar charts
+            media = None
+            if v_type == "Radar":
+                media = self.find_video(f1, f2, "Matchup") or self.find_image(f1, f2, v_type)
+            else:
+                media = self.find_image(f1, f2, v_type)
+            
+            if text and self.post_tweet(text, media):
                 self.save_history(uid)
                 count += 1
                 time.sleep(60)

@@ -1,6 +1,7 @@
 import json
 import os
 import sys
+import config  # Import config for thresholds
 
 # ==========================================
 # ⚙️ AYARLAR
@@ -46,18 +47,18 @@ def main():
         val = data.get('value_bets', {})
         viol = data.get('violence_score', 0)
         
-        # 1. BANKO KUPON (Güven >= 8)
+        # 1. BANKO KUPON (Güven >= config threshold)
         confidence = pred.get('confidence', 0)
-        if isinstance(confidence, int) and confidence >= 8:
+        if isinstance(confidence, int) and confidence >= config.PARLAY_SAFE_CONFIDENCE:
             parlays['safe_slip'].append({
                 "match": matchup,
                 "pick": f"{pred.get('winner')} ML", # ML = Moneyline (Kazanır)
                 "reason": f"High Confidence ({confidence}/10). {val.get('reasoning', '')[:50]}..."
             })
 
-        # 2. ŞİDDET KUPONU (Violence >= 80)
+        # 2. ŞİDDET KUPONU (Violence >= config threshold)
         # Bu maçlar genelde "Jüriye Gitmez" (FDGTD) veya "Under" biter.
-        if isinstance(viol, int) and viol >= 80:
+        if isinstance(viol, int) and viol >= config.PARLAY_VIOLENCE_SCORE:
             parlays['violence_slip'].append({
                 "match": matchup,
                 "pick": "Fight Does NOT Go Distance / Under 2.5",
