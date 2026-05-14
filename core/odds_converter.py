@@ -13,13 +13,19 @@ def decimal_to_american(decimal_odds):
     Returns:
         str: American odds (e.g., "-200", "+160")
     """
-    if decimal_odds >= 2.0:
+    d = float(decimal_odds)
+    if d <= 1.0 or d != d:  # invalid / NaN
+        return "+100"
+    if d >= 2.0:
         # Underdog: (Decimal - 1) × 100
-        american = int((decimal_odds - 1) * 100)
+        american = int((d - 1) * 100)
         return f"+{american}"
     else:
         # Favorite: -100 / (Decimal - 1)
-        american = int(-100 / (decimal_odds - 1))
+        denom = d - 1.0
+        if denom < 1e-6:
+            return "-10000"
+        american = int(-100 / denom)
         return str(american)
 
 def american_to_decimal(american_odds):

@@ -8,12 +8,19 @@ import time
 
 # Add root to sys.path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from core.paths import get_data_path
 
 import importlib.util
-spec = importlib.util.spec_from_file_location("SpotlightEngine", "09_spotlight_engine.py")
-SpotlightEngine = importlib.util.module_from_spec(spec)
-sys.modules["SpotlightEngine"] = SpotlightEngine
-spec.loader.exec_module(SpotlightEngine)
+# Import Spotlight Engine from modules
+try:
+    module_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'modules', '_09_spotlight_engine.py'))
+    spec = importlib.util.spec_from_file_location("SpotlightEngine", module_path)
+    SpotlightEngine = importlib.util.module_from_spec(spec)
+    sys.modules["SpotlightEngine"] = SpotlightEngine
+    spec.loader.exec_module(SpotlightEngine)
+except Exception as e:
+    print(f"❌ Error loading SpotlightEngine: {e}")
+    sys.exit(1)
 
 OUTPUT_DIR = "simulations"
 
@@ -49,9 +56,11 @@ def run_simulation():
              try:
                  SpotlightEngine.main()
                  
+                 
                  # Read result
-                 if os.path.exists("spotlight_ready.json"):
-                     with open("spotlight_ready.json", "r") as f:
+                 output_file = get_data_path("spotlight_ready.json")
+                 if os.path.exists(output_file):
+                     with open(output_file, "r") as f:
                          data = json.load(f)
                      
                      # Determine Mode from output to verify
@@ -63,7 +72,7 @@ def run_simulation():
                      else: mode_used = "STANDARD"
                      
                      filename = f"{OUTPUT_DIR}/{day_name}_{mode_used}.json"
-                     shutil.copy("spotlight_ready.json", filename)
+                     shutil.copy(output_file, filename)
                      print(f"   ✅ Saved: {filename}")
                  else:
                      print("   ❌ No output generated.")

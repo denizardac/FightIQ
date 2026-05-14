@@ -1,0 +1,938 @@
+[
+    {
+        "fighters": [
+            "Justin Gaethje",
+            "Paddy Pimblett"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/9e8f6c728eb01124",
+            "http://ufcstats.com/fighter-details/7826923b47f8d72a"
+        ],
+        "stats": [
+            {
+                "SLpM": "6.59",
+                "Str_Acc": "58%",
+                "SApM": "7.18",
+                "Str_Def": "51%",
+                "TD_Avg": "0.10",
+                "TD_Acc": "14%",
+                "TD_Def": "68%",
+                "Sub_Avg": "0.0",
+                "Nickname": "The Highlight",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "5.19",
+                "Str_Acc": "53%",
+                "SApM": "3.14",
+                "Str_Def": "42%",
+                "TD_Avg": "0.96",
+                "TD_Acc": "28%",
+                "TD_Def": "50%",
+                "Sub_Avg": "1.7",
+                "Nickname": "The Baddy",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Ilia Topuria supports \u2018well-deserved\u2019 Justin Gaethje vs. Paddy Pimblett title fight - MMA Fighting",
+                    "date": "Sun, 21 Dec 2025 18:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQMVJtaGRVaGp4UVZxZUZUSVE4NFdmQm1pcGVmYVUyZi10TmdyQnI1RWlNWWZHWVpvMDVhaXpzX1RsOFdFX0RtSVdXckRGQUE3WUUtWm1KbERtRmVNNzNtVkJLWDJmU0M1QTRWNFNkeFd5TWdnN3g4RDRrRXh1cXY4cTNnSkNqdnY5YmNmRjlfQm1YZlRuRDBKcl9yRXJNT3JiMHBudmRmU2dkeWU4bHJEQnJ6ZUxCc2dhdVkwWjVFRU9rNHNtaVE?oc=5"
+                },
+                {
+                    "title": "UFC 324 poster: Paramount+ logo for first time, underplayed co-main - MMA Junkie",
+                    "date": "Sat, 20 Dec 2025 22:17:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi_wFBVV95cUxNRUNSbU5YeURnRmpfRTVxUnJna2s1WVhJWUEwMC1ublNFSGQ3cWJMeGphMVhrLWlWR3d1NV84MFhvMVM3ZnBUU21veFc1RzNmajZTTlFDanZMOVJ1Q1ZaMlF3MWFXNU9OTWV3T3JBYWhocnZvRUt2Ml8wV3RHbDNNeTRuOGJhQjR6YnJSZXNub3ZGRE4xcFJ5Nkl5bnViLTFTNFRjSVNRTlpZbVA0Y1otVnFPSFJKb0RBNUJyYTZDQVVBRmRsOXQtcE00NS1aMVZBUGhrNlBmTkkzTkFxQlZ5TjI5cnVHNDF5VG9peExWV1E2Z2JxRjZhcmdfVUVkZUk?oc=5"
+                },
+                {
+                    "title": "Paddy Pimblett Expects to Retire Justin Gaethje at UFC 324 - Sherdog",
+                    "date": "Sat, 20 Dec 2025 20:53:08 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMioAFBVV95cUxNamhVYUxySXRSOHBvXzFibXl5blgyLVlRRGtZSGxpOG9fM3dxVFFTNmlnaW9HZlRFUlBacVBnSjlmbDBxaDdraTdXMWY5akpWVTR5NHVjMXJjUUgzWEs2RFYwdzJJOUNHYnZDcTdhWTNmOGlLbDZRUS1YODFidlRXSjRqOU5vcW85TU1DSWxOeWdWY19uWEhqcTdwZnIydFFp0gGmAUFVX3lxTE14T2x3TnJkc29qeWhNaXRWMWJpN3dLV1pzQXJzaVcxcTh2ckVQLWhtRkZ1czlaTl96ZUpucXpQV19iTC15YXhMQXpqdnlhQ2drbmMzWWdJWXlVUkhRczJ1QVhXWHBvYmh6T29lMTJ2Y0wxZHNvYnZzem0tRjN5V1M4WDU2V1ZhR0lvU3BRbV9rTFRzcmZCVjZBTWxkTWZESkJ1R3hacWc?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Ilia Topuria and Paddy Pimblett surprisingly agree on Arman Tsarukyan\u2019s UFC spot - Bloody Elbow",
+                    "date": "Sun, 21 Dec 2025 20:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMitgFBVV95cUxOLUlxSU40Vi1xZThZY3Z3LXp2cTRLQ1NKNEtPSHU4YzduMk00T1B3MGl6bkFkN0g0TzYzRlBFamRraUttTjNDVzBHM05SSFBDV3ktX1k5RHlzbG92eHM3ZWhWMjZlSE54Q0tNWUFuZFktU0VaMERZY2I1M0s5NFpLMENGTjAyVVlwMmZ2Y2t2cmxQbDAtYnBiT0Z0RFJZUVl1T1BZWHRRREpmZmNsOEpvQWVDS2FSZw?oc=5"
+                },
+                {
+                    "title": "Ilia Topuria supports \u2018well-deserved\u2019 Justin Gaethje vs. Paddy Pimblett title fight - MMA Fighting",
+                    "date": "Sun, 21 Dec 2025 18:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMixgFBVV95cUxQMVJtaGRVaGp4UVZxZUZUSVE4NFdmQm1pcGVmYVUyZi10TmdyQnI1RWlNWWZHWVpvMDVhaXpzX1RsOFdFX0RtSVdXckRGQUE3WUUtWm1KbERtRmVNNzNtVkJLWDJmU0M1QTRWNFNkeFd5TWdnN3g4RDRrRXh1cXY4cTNnSkNqdnY5YmNmRjlfQm1YZlRuRDBKcl9yRXJNT3JiMHBudmRmU2dkeWU4bHJEQnJ6ZUxCc2dhdVkwWjVFRU9rNHNtaVE?oc=5"
+                },
+                {
+                    "title": "UFC 324 poster: Paramount+ logo for first time, underplayed co-main - MMA Junkie",
+                    "date": "Sat, 20 Dec 2025 22:17:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi_wFBVV95cUxNRUNSbU5YeURnRmpfRTVxUnJna2s1WVhJWUEwMC1ublNFSGQ3cWJMeGphMVhrLWlWR3d1NV84MFhvMVM3ZnBUU21veFc1RzNmajZTTlFDanZMOVJ1Q1ZaMlF3MWFXNU9OTWV3T3JBYWhocnZvRUt2Ml8wV3RHbDNNeTRuOGJhQjR6YnJSZXNub3ZGRE4xcFJ5Nkl5bnViLTFTNFRjSVNRTlpZbVA0Y1otVnFPSFJKb0RBNUJyYTZDQVVBRmRsOXQtcE00NS1aMVZBUGhrNlBmTkkzTkFxQlZ5TjI5cnVHNDF5VG9peExWV1E2Z2JxRjZhcmdfVUVkZUk?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Kayla Harrison",
+            "Amanda Nunes"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/1af1170ed937cba7",
+            "http://ufcstats.com/fighter-details/80fa8218c99f9c58"
+        ],
+        "stats": [
+            {
+                "SLpM": "4.29",
+                "Str_Acc": "62%",
+                "SApM": "1.10",
+                "Str_Def": "66%",
+                "TD_Avg": "2.84",
+                "TD_Acc": "37%",
+                "TD_Def": "100%",
+                "Sub_Avg": "0.9",
+                "Nickname": "",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "4.55",
+                "Str_Acc": "51%",
+                "SApM": "2.62",
+                "Str_Def": "57%",
+                "TD_Avg": "2.73",
+                "TD_Acc": "54%",
+                "TD_Def": "82%",
+                "Sub_Avg": "0.7",
+                "Nickname": "The Lioness",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Kayla Harrison Backstage Interview | UFC 2025 Seasonal Press Conference - UFC.com",
+                    "date": "Tue, 16 Dec 2025 19:32:24 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTE55LXdGbWF3QmhNYWRkMEZRZGc1dkxqc0NuSEFHYlowcDFkYm1idGphcm1ySnRER194YjFuUVVic0VvTDFsRUpF?oc=5"
+                },
+                {
+                    "title": "Kayla Harrison agrees the belt 'should mean something' in UFC 324 co-main-event controversy - Yahoo Sports",
+                    "date": "Tue, 02 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxQZVdGNHU4RUhxZ3d3ZF9KbW1pdnlEaDczdUhJVzk4SnhfSEl5bjdSYjNiTHFFeS1wb19JT2tNYnlkay1ick5xQjZ1alJ6dHpFb2dwdGotVzJVbTRNc2RXdmY1OTRUZ2xFd3BIOUdCV3FhTHB1V2RPOFVXbTU2eWJlS3lTNjV6bmlUU09aTTFOeHNpZ0tBQ01NcEVHYzd4Zmk2dmZiN0pKN3VIbG1xNDJUMFp4a3kzN01DUDFrSG51OWhWY3ktOEwxbExvNmZ3UWhUeG5faXFsVEQ?oc=5"
+                },
+                {
+                    "title": "UFC 324 video: Kayla Harrison vs. Amanda Nunes first faceoff - MMA Junkie",
+                    "date": "Fri, 05 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiygFBVV95cUxOZ0hvdXRrNXF5LW9jWlNIaVdtR3c5TlB4ZXZBa2VGMHF1a2hWdjFLRUZDN0x5NnBETUJhbm9BYVBwMDM5LWh4QWdzTnFVVGJhVkRRbHA5YWNqUjRROUtwajdEaVBtQnFlQ0xfSnF0MkgtaWhfa3BaV3dXU2I5b3YwUVhPY2hhSWhCUTRMRjE3RUtSdUo0bWQwUFgwZ3ExYkFERVRPb2tiZHlZYUgtN3E5VzVLYWRjbU00VzM1T3FkMzhCeFNhSjdxOWN3?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Amanda Nunes and Nina Nunes combined net worth in 2025: UFC earnings, power couple, career, lifestyle and - Times of India",
+                    "date": "Mon, 22 Dec 2025 15:22:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiqwJBVV95cUxPUTNvbHR2NFYxYTZ0OWkyTXBsa2FSVEJpNDhFNTZjT1AtSlRTMmY5bXgyYmhJZzlJTGpiR0I4aWZTSzBJcXBuSGRkWUVYYVNEWEhaNHdvU09pR3dBcWFzb1haRTFxQWluY3JlQ215dmVUaHVJWnIxTlVvbWdHOFdwQ19jLWVfTGJMMTViTDVPSVBVWEY2QTdHQTRrN2RxOGcxQ1l3VEVDZGROUVRQOVBDYUF4MF91M2xSTkM0RGNwNW9zdFRSSjhGSmhfOFNXQmFfTGR5MXNPTXRGbHVYMndhMW1LYVlBbkVDTnZ4M0RsSGVzU21GYzQxdEdpYXNpdzJ4SElQamIwVDlsY3BiQWxWa0RxWS0zQm1iOTlMRFFHU0xEaUF0N3cyU3hZSdIBsAJBVV95cUxOWDBhejluRS0yTUJqZkhwb2x1dllKYUxLR25rbm15R0NoX080UlV0RGNwN0VsUWNnWm9acnRqRG8tWWUtSlNQZHFDbm9sVGozaXcza1g4bXpEc0hfa01ZU0FNdjVnNG00ZFNHMU4yd205RS1YZnl0Rm9ndXJSX3MwSjFOSUR0MDZQai1jYU9EQUdzUk9mVW5pd2ZqMWZXcy1YZlBBX29lMVp1RGlqc2pCdExXbG1qd0JiOWFBa18zYldJYVBqbGthemtXYjVKZWZsTXVtb3dnLUJXRFhLVnZsaTlBdjVld05oZVdYNHB5dW9KV1R1MzFBQ1Nvbkoya1pfTTlEWnlOTjA4d2JlT1pqM2s5SkZLVS1rR3hhSDRhUnVFbjJMUml0bUxMdXFJeVly?oc=5"
+                },
+                {
+                    "title": "Amanda Nunes Backstage Interview | UFC 2025 Seasonal Press Conference - UFC.com",
+                    "date": "Tue, 16 Dec 2025 20:02:35 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTE4zbUJXOFdyT2JKV1llZTVLdDV0eV9iYkxZb3RITlV4MC1WNlRXb3VacEVyNDNiak80blRubFQyUFp5Sk5YaDVz?oc=5"
+                },
+                {
+                    "title": "UFC 324 video: Kayla Harrison vs. Amanda Nunes first faceoff - Yahoo Sports",
+                    "date": "Sat, 06 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMigwFBVV95cUxQWVB5RnJ5QW1mUGN5SmtHOVdpZGZ4MVZZR2hWTTJPRm53bTZNSTJqQmd2WnNmRDFlcEVDTm1EZTFqMENBSEIxQ0hCajM4VXQ5NXNaRUlWc0NQUDlBOFJEX1VyUVlDZm9IeWd5QU5GbVhQckI3S3BPNDZLNmEtSzRiT2lpUQ?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Sean O'Malley",
+            "Song Yadong"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/b50a426a33da0012",
+            "http://ufcstats.com/fighter-details/efb96bf3e9ada36f"
+        ],
+        "stats": [
+            {
+                "SLpM": "6.30",
+                "Str_Acc": "61%",
+                "SApM": "3.48",
+                "Str_Def": "60%",
+                "TD_Avg": "0.27",
+                "TD_Acc": "42%",
+                "TD_Def": "61%",
+                "Sub_Avg": "0.3",
+                "Nickname": "Suga",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "4.58",
+                "Str_Acc": "43%",
+                "SApM": "4.00",
+                "Str_Def": "55%",
+                "TD_Avg": "0.61",
+                "TD_Acc": "38%",
+                "TD_Def": "73%",
+                "Sub_Avg": "0.1",
+                "Nickname": "Kung Fu Kid",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "UFC 324: Sean O'Malley, Yadong Song full fight marathon - Yahoo Sports",
+                    "date": "Mon, 22 Dec 2025 13:01:05 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiggFBVV95cUxNaWlhZ2dPSi05d3hXbmZjamt4Qll6cldUZ2FBdHJLLVlxV2xCV19sM2hfUHVMOXo4Umh4aVJBeDJTZ19vdkhENWZWWHVTLXRWblZwMGZRanRkSFRyUTEydW9CRm1abUpLMXZVX3U2QXZua3FYQzlMTmhad2lyNU1pdG1B?oc=5"
+                },
+                {
+                    "title": "Former UFC champion: Jake Paul's performance was 'inspiring' - MMAWeekly.com",
+                    "date": "Mon, 22 Dec 2025 04:03:37 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMikAFBVV95cUxOWGZHU19FM1dHRWw3S0tkTHd6RGxsS2R5ZXU4WVE4YzZHTUIycC1USHI3NEdtX0JzWF9rTlhaa1hQME52WG9CdjVfYlcxTW5ZVkdlSHQ0MW4xN3J2R0FKTUtIZ0R3UEVjX3pzeUdYLUI2dTBiejVkT1NzV0pvM1FuVjMtTjFOa1RTMXJEZElTRTk?oc=5"
+                },
+                {
+                    "title": "THE SUBMISSIONS | 2025 UFC.com Awards - UFC.com",
+                    "date": "Sat, 20 Dec 2025 16:00:24 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiZkFVX3lxTE5pMjBGTkp1LUpYZUtuTXNVeXlLSHVsWlMyYnJGbzA1QkJMR3ZvQ29PMFZPVkpMLWFvTElKX21EZm1iQS1qLUhGRS0tc043cUJERi0wVnltdFhaeGtfWloxOUJxbUotUQ?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "UFC 324: Sean O'Malley, Yadong Song full fight marathon - Yahoo Sports",
+                    "date": "Mon, 22 Dec 2025 13:01:05 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiggFBVV95cUxNaWlhZ2dPSi05d3hXbmZjamt4Qll6cldUZ2FBdHJLLVlxV2xCV19sM2hfUHVMOXo4Umh4aVJBeDJTZ19vdkhENWZWWHVTLXRWblZwMGZRanRkSFRyUTEydW9CRm1abUpLMXZVX3U2QXZua3FYQzlMTmhad2lyNU1pdG1B?oc=5"
+                },
+                {
+                    "title": "When Is Song Yadong\u2019s Next Fight? - betmgm.com",
+                    "date": "Fri, 28 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMif0FVX3lxTE9xSWprTTE4c21iRVBkNlg3Q1pNVlRseEtvallac2ZxWk5WRWlxVkt6YU1ZZy1wSXl4RjhuMjdyeWFTbGdEU3RlM1pHUUVHY0xHWHVKUXVNWGR0dmFEdG5NVnVGRGx2T290azM5WC11bEMyblZGaDdaQ1p1aXJ2emc?oc=5"
+                },
+                {
+                    "title": "Sean O'Malley wanted someone else, but Song Yadong 'good fight' at UFC 324 - MMA Junkie",
+                    "date": "Tue, 02 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxQNHpPSk9UdVhPOGt3eHpLQV9hODJJSVRZY3lyOU5lVTg4VjF4NkhlWnlkNy1wejg4bUlEWGVxUXRhME8ycUZGUHpUdUwwMWVHTzRjM2ZhaFhYZFBLVi02NUJMSU1DdDU2el9SV0NuMmFLQUQ2Mk9pckdBWFRxUlZJRE5sZGx5VFdlWjN1NV90YXhuYlRQSFVnUWI5OHZnRlF1MnVQRHhMVmNNR2xwNGdjOFZpZXRDSVpQUElic1BB?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Waldo Cortes Acosta",
+            "Derrick Lewis"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/fc08099550072fe4",
+            "http://ufcstats.com/fighter-details/d3df1add9d9a7efb"
+        ],
+        "stats": [
+            {
+                "SLpM": "5.55",
+                "Str_Acc": "48%",
+                "SApM": "3.53",
+                "Str_Def": "55%",
+                "TD_Avg": "0.35",
+                "TD_Acc": "50%",
+                "TD_Def": "72%",
+                "Sub_Avg": "0.1",
+                "Nickname": "Salsa Boy",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "2.51",
+                "Str_Acc": "50%",
+                "SApM": "2.49",
+                "Str_Def": "40%",
+                "TD_Avg": "0.56",
+                "TD_Acc": "26%",
+                "TD_Def": "52%",
+                "Sub_Avg": "0.0",
+                "Nickname": "The Black Beast",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Greatest Short-Notice Wins Of 2025 - UFC.com",
+                    "date": "Wed, 17 Dec 2025 19:14:46 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMirAFBVV95cUxOdk0xZGVndTdWN1dYY0JrZE5PaDlPeHRlczRGVGZoQzBOOTJpMGZjWDhDZjRtMll5UnljekdxN3cwd0RLUlhKUXZOSlpfRlRQdXg3SXVXV2VTdUw4QWtQN3RkSExSWEJrUVhOX2NXWUxjY21jR3hNRTdIVnRRSHVGYW5MRkEwMFhJdExQTlRYMHZhMTM5T1NGaTMydDdIOEdXWGRVeEZLekJCZDNz?oc=5"
+                },
+                {
+                    "title": "UFC Qatar: Waldo Cortes-Acosta steps up to face Shamil Gaziev on 3 days' notice - Yahoo Sports",
+                    "date": "Thu, 20 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi2wFBVV95cUxPUU1tU2hZRm9iNDRqOWlVY3FQTk9ZTFNhd2M3b3dUYl9QVjBoWmE3eDl3TEM1RkY2dzQyS1Mxd3JWT28tQ2ROQmlJVVJvcVlnUEs1QzBDV0gzZ056NXo0LXFQdm9LVktkclN2ejRyRks2amhpRUZ2NWg3dXVGUnFkeXpfeHpGOEk1bHJ5bUstVTFPMVFBRGF1RUhQU3FwZEMxb09TQi1hZjR6clZYZjQwLUJXV1RQMlZheTVva2gtYnBwbk1VM2UyalpXRGdwLUVVNTZ6XzY2M2s0WFk?oc=5"
+                },
+                {
+                    "title": "Wild Turn of Events Sees Waldo Cortes-Acosta Go From Poke to KO of Ante Delija in UFC Vegas 110 Co-Main - Cageside Press",
+                    "date": "Sat, 01 Nov 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi2AFBVV95cUxONF9oa2pJS2gzdk40RlZvT0kxZWZkMGFDTXo3QmYweldNYUdQNzdncFRNRFhjb1A2QkRjYWFmcG9sVzFuM1FzdUhkSFp4ZjdqTDlSYUF2cFNIeUlZUWFWVmFOdU5ONU84T2xDaWllYUM0YVN3NjBfTHZmcVU2VS1HNTJnS3E4WHBpQkc3MVc0RGlJc2ZBSmJNdWI2a1IzeUR6ZUF2MXpWWjQxcFdrdE9sNHpkNHMwSnB2a25xOWN0a0NtSHRib1h3ZF9WVmNvdExTZWRGdl92ZFg?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Wildest Final Seconds In UFC History - UFC.com",
+                    "date": "Fri, 19 Dec 2025 17:43:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMizgFBVV95cUxQX2p0VVFDazhFUTU4dWFIWlEydG1SYmUwb1hYM0lsSXUtNGZwMG1wM3g0eFllY0daUFFGMVB6SGlVbVhtdWhLRDZTZ1pWS2t2S01keG9VaDRBRkp5VmRJV0FBeHR3bFY2UXhOdHl3Q3hCeG9IRmduNUFSVnBMaldrU251U29razdjeHNBME5CeXV2clQxdXF0NFBwWEZQX3B5Q3BJRjhtWm05YVBoWk1zbFowSkhMa19OVEI0aVRXVTR4VzI1bmFqTDM1enVCdw?oc=5"
+                },
+                {
+                    "title": "When Is Derrick Lewis\u2019 Next Fight? - betmgm.com",
+                    "date": "Fri, 28 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiggFBVV95cUxNUk16czNWZUx4cTd3dDlaX05GUHUzdXF1RzY0cUgzQU1oOF9YUkxQNG1Tc3NnOWNmVlpEdjRPZmxrSVVscHU3TXBLdE85czRPdFRUdy1SSHRrYXA2T1BpbVdOUnJ3ZlJMd3BoOU9VUk9XeVJaMTI5VXJVamJvT1NsQ1hR?oc=5"
+                },
+                {
+                    "title": "Waldo Cortes-Acosta eyeing Jan. 24 fight against Derrick Lewis on UFC's Paramount debut - Yahoo Sports",
+                    "date": "Wed, 26 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi0wFBVV95cUxOdXhYWmtfRTFYWFBZaFBpM3NHdjBoNFNyVzU1aXFxMFVJVzFSMnRoT01VcG9VMDByekRDdl83VFA3dHhRODctdm5GbUFvRWdxa0h3V05PTElXYTVEZHZ4aDlmNk1XTEZidWZxdVhhS25KQzlscTBXY1hGUXVCbkttU29vOWlBWDFsV1hwWDdDVUVUX1RKRmkzNVNCREV0SFYxZ2dnYU9Od1BHd002eFc1Uy05dTk5RHF1TFVCX0xmYUJkaEt0eUlQYVlxQ0tlX04ybmEw?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Arnold Allen",
+            "Jean Silva"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/040a74bb0a465c54",
+            "http://ufcstats.com/fighter-details/52ef95b5860fb28c"
+        ],
+        "stats": [
+            {
+                "SLpM": "3.45",
+                "Str_Acc": "41%",
+                "SApM": "2.88",
+                "Str_Def": "61%",
+                "TD_Avg": "0.93",
+                "TD_Acc": "47%",
+                "TD_Def": "75%",
+                "Sub_Avg": "0.3",
+                "Nickname": "Almighty",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "4.79",
+                "Str_Acc": "51%",
+                "SApM": "4.69",
+                "Str_Def": "54%",
+                "TD_Avg": "0.50",
+                "TD_Acc": "50%",
+                "TD_Def": "78%",
+                "Sub_Avg": "0.8",
+                "Nickname": "Lord",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Arnold Allen vs. Jean Silva in the works for UFC 324 - MMA Fighting",
+                    "date": "Tue, 25 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMilAFBVV95cUxNWHp6ZFJCM0xscHBJX0hZMkNaM3d6YUNjZUNLZzhfV3NacnRCLV9JcnJMVS1MNlVmd1JOUlYwVkVyWHNXUjkteWp6TlJfc3lncURjcncwaDQ0UFNSSUpkX3I1X2NBWHJDaWc1UGgwN0xmQWFFOUI0ZFJuLXZxRnZxMHNzQ2d0U2xmNHJYVFlydUc3THpm?oc=5"
+                },
+                {
+                    "title": "Arnold Allen talks fighting Jean Silva at UFC 324: 'It's like two opposites' - Yahoo Sports",
+                    "date": "Wed, 03 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMihwFBVV95cUxOWmE0cU5oMldQdW4xbzdyVWJUTGNNODNVZGZPLXRIaHpUY0FLUXRsS0FrSHUxUFJsN184X2s1SG9qT2Z5M3dPa2FOdDQ3SzRFWUVveTRvRUZab0k0dEVtVFNadDAtb0E3V21OcFF2ZFdvQzZnSFZhVWROR0stM01PNlBVbjJtXzg?oc=5"
+                },
+                {
+                    "title": "Ranked UFC fighter Arnold Allen attacked on Canadian streets for not speaking French - New York Post",
+                    "date": "Thu, 23 Oct 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi5AFBVV95cUxOZERYbDJlMW5WQ09ILTMyWUoxdFd3bFRRcHpBbXBTTHhUeDJydFE3bHB4d0pLMzFXbWEzZ2J1cGpIOVlzUDlLWkNxQmtfSHN2UEw3X0J2N0hhNTdxS3ZXX0hBS1dzcklXN2YyMjFUTmREZy1hckZXN3JDRk9aZVRvZEhHMDdwR05nUHF5XzZfV2Q0b19SM3Q0Vy1xS0VLUFhqc3JHT25ZWWFfeDZrMkVLcDdkeWtOWGhjbW1iSUhqTVZoN2dtQnNTOFdQZml6SVZVRzNGMmYwWXdIZ3B3VE0xd2s1MHM?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "THE SUBMISSIONS | 2025 UFC.com Awards - UFC.com",
+                    "date": "Sat, 20 Dec 2025 16:00:24 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiZkFVX3lxTE5pMjBGTkp1LUpYZUtuTXNVeXlLSHVsWlMyYnJGbzA1QkJMR3ZvQ29PMFZPVkpMLWFvTElKX21EZm1iQS1qLUhGRS0tc043cUJERi0wVnltdFhaeGtfWloxOUJxbUotUQ?oc=5"
+                },
+                {
+                    "title": "When Is Jean Silva\u2019s Next Fight? - betmgm.com",
+                    "date": "Fri, 28 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMifkFVX3lxTE5vN1Q1SDN4NE52cURtYmFVTVZfbXFUa3ZDZTZ6RjJRN0RwS05ZSDMzZENNcjluMzZjdC1idGpkZzV2eFVvS09jVGUzbnhnaTZ0b0QtZHBFaW1aTk9ZeGxpb21PQ3ZENDUtLVlSX3dHSk5UQkJXc2pkT1ZQTVZNUQ?oc=5"
+                },
+                {
+                    "title": "Arnold Allen vs. Jean Silva in the works for UFC 324 - MMA Fighting",
+                    "date": "Tue, 25 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMilAFBVV95cUxNWHp6ZFJCM0xscHBJX0hZMkNaM3d6YUNjZUNLZzhfV3NacnRCLV9JcnJMVS1MNlVmd1JOUlYwVkVyWHNXUjkteWp6TlJfc3lncURjcncwaDQ0UFNSSUpkX3I1X2NBWHJDaWc1UGgwN0xmQWFFOUI0ZFJuLXZxRnZxMHNzQ2d0U2xmNHJYVFlydUc3THpm?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Natalia Silva",
+            "Rose Namajunas"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/262d32ebda89efc4",
+            "http://ufcstats.com/fighter-details/47b63240018d5d86"
+        ],
+        "stats": [
+            {
+                "SLpM": "5.04",
+                "Str_Acc": "46%",
+                "SApM": "2.46",
+                "Str_Def": "65%",
+                "TD_Avg": "0.34",
+                "TD_Acc": "25%",
+                "TD_Def": "92%",
+                "Sub_Avg": "0.0",
+                "Nickname": "",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "3.60",
+                "Str_Acc": "41%",
+                "SApM": "3.38",
+                "Str_Def": "63%",
+                "TD_Avg": "1.49",
+                "TD_Acc": "50%",
+                "TD_Def": "62%",
+                "Sub_Avg": "0.4",
+                "Nickname": "Thug",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Alexa Grasso Out, Natalia Silva In Against Rose Namajunas At UFC 324 - Cageside Press",
+                    "date": "Wed, 03 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiqAFBVV95cUxNUTBKUTMwczhKcnlOR05yV1dUSU9aVUZaZTFnWTlnVGVUVWEzM0lLYTBDZW5ncE9qSkxjSUJVQjhzQVgteGY0NExBall4azBrR0dFUmFxc1lVTGFJMnhKbE42V1JDLWNZcWUzUy1FSHRpUFlNaThXMGZodmZKeXppVGEweE1tSVpqOG1OT1ZyVVpHekduUE1JUjU5V3IzeHc2N0w5YjF5MFY?oc=5"
+                },
+                {
+                    "title": "Natalia Silva | The Small-Town Girl Looking To Conquer The World - UFC.com",
+                    "date": "Fri, 09 May 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMimgFBVV95cUxQS2U5aE15emdNYWhFdWJOdm94RlNpYk1aaVpjY1hXZlRkUjJoeWpObXEzN2F1SUlFQmFKbHZ4NG12RVJIWkFMMkg5M1FUVTlodDJBYy1FR3JqYjFOUTQ4Y2d1RW1Oa1FRd0R4eWZFc0tsSnFFa2FweTk3N05pbTNDUFFiVFpnbVVEM1pzUXByTVpad08zU0NGSkx3?oc=5"
+                },
+                {
+                    "title": "With Alexa Grasso out of UFC 324, Rose Namajunas gets new opponent - MMA Fighting",
+                    "date": "Wed, 03 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMisgFBVV95cUxObFpmRWV1S2VrUHVHTmtHOC1jQWRQdUpQcmp6Z25weXZZdVd2eUk2M3gzY0oxTF9qcmItR0xWd2FqYTl6RnEyZ0pRUHNiaGlLR2hDSG0xMWJsWW01VjVMMDcwS2p4WmF4dUVnVWh1VHZoZVVGRFQ5aENLanVUYlZFTzI1VGYwRHBYdUNyZVFJb2NnLTFHR05sZ3dCRXdwbWlPM2JFT2xsemNPbEl4d0dtcnpB?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Most Shocking Knockouts In UFC History - UFC.com",
+                    "date": "Mon, 22 Dec 2025 15:45:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi0wFBVV95cUxOQy1IalR0XzVPdmRfQU5VS1JKWTZzelJGTThLR1JlZVQ3NnpzNDZrYTZEZ2lNZkV1aWJVc3UyTkVXa2V5TEpKOFlCV1dNYVhvaW1PcEJ6bG5BUFE1NkhyVlFZWVNMY1QxNkw0WWt2ZS16SS00TldPVUJ1bkptRDZ3WExzMHJIYnVZLVhPTFJBeS1saU14aU14RTVrUUFTVHJ3c251SFJnTi01dEl5QUZPUE51UmtfTXNuTXczQlh1anJTbXFUaDI0dlVNQ0xacHdTalpR?oc=5"
+                },
+                {
+                    "title": "When Is Rose Namajunas\u2019 Next Fight? - betmgm.com",
+                    "date": "Wed, 17 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMigwFBVV95cUxOLWJOaHY2MkJObEdtdHJnZC1xZjJvYkRsMy16b0d3eklJcVFVT00xU2hGQmZiSXBfTFRRNV9HMldXNzVsd01pLUphQmhiX0RwZjR1Y2w4V0dTYm14WWtrYWxzVFk1UzJkZUxGRFBlR2ZOR1dGZzBNOV9TNU5BNTRIZ0ZiRQ?oc=5"
+                },
+                {
+                    "title": "With Alexa Grasso out of UFC 324, Rose Namajunas gets new opponent - MMA Fighting",
+                    "date": "Wed, 03 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMisgFBVV95cUxObFpmRWV1S2VrUHVHTmtHOC1jQWRQdUpQcmp6Z25weXZZdVd2eUk2M3gzY0oxTF9qcmItR0xWd2FqYTl6RnEyZ0pRUHNiaGlLR2hDSG0xMWJsWW01VjVMMDcwS2p4WmF4dUVnVWh1VHZoZVVGRFQ5aENLanVUYlZFTzI1VGYwRHBYdUNyZVFJb2NnLTFHR05sZ3dCRXdwbWlPM2JFT2xsemNPbEl4d0dtcnpB?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Umar Nurmagomedov",
+            "Deiveson Figueiredo"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/2b6fc1c02736833d",
+            "http://ufcstats.com/fighter-details/aa72b0f831d0bfe5"
+        ],
+        "stats": [
+            {
+                "SLpM": "4.08",
+                "Str_Acc": "57%",
+                "SApM": "2.04",
+                "Str_Def": "60%",
+                "TD_Avg": "4.30",
+                "TD_Acc": "47%",
+                "TD_Def": "79%",
+                "Sub_Avg": "0.3",
+                "Nickname": "",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "2.75",
+                "Str_Acc": "54%",
+                "SApM": "3.54",
+                "Str_Def": "49%",
+                "TD_Avg": "1.71",
+                "TD_Acc": "35%",
+                "TD_Def": "57%",
+                "Sub_Avg": "1.3",
+                "Nickname": "Deus da Guerra",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Umar Nurmagomedov vs. Mario Bautista: Reigning UFC champion predicts the winner - MSN",
+                    "date": "Mon, 22 Dec 2025 06:04:22 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi2gJBVV95cUxNRDlKYTBzQ0lrRmx1NExYeVUteFVpODNBNTNnZU5ROThjVzYzTWVDZ1JQX0lnQ004VS15QUtrdlcxVnlhRUFKbFJ1MHVIc09qWlk1RlBUYnp4TzhzRVNZUXFIRUE3VDBhRjlpNG8xeVRIaXBJVmtnVC1tanJ3cmRESXAxSG9KTW9GUnR6NnhYWmxKYzB6ZThUTkx1VXppbk5VN0JTX3Y1VlZIcV9HNFJTTV9OMDlFSVFMOHdvRnBRUEQxWWR6Ry0yNTJUekY5T0gyOUE3cEJNaGNucXg0dmY5U05kMlg5Mk9Zai1faXJIcm1YRFZWRVVvSHFOaDktSWh6MENlSWpVemIxRzhoZ0I0Mmpwc0hyeXZvbGNwUVE5X01PNF84X2M4SGM2S3ZyUmE3TUxrZ1J5MnExVUNVVlBfUHBsU1N2Uk1EdWd6MHpCSkJITlUtY21xQ1ZR?oc=5"
+                },
+                {
+                    "title": "Umar Nurmagomedov sends message to new champion Petr Yan after his win at UFC 323 - MMA Fighting",
+                    "date": "Sun, 07 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMivAFBVV95cUxOUktXQUNVaEkwOVRyVHFBMXB4Vlo2YVJxZ2twd3ZQX1VWTktvSmJ3NmVOVTNOLWF1T0xWOWJTVHQzek10RlZVSXVTemZiaHFzNkJfR1YyTFVkbk9Td2NiUVl5TWtzZVNyV3BzUkhuRmZUYko1NkN6QkhMTWdOZTR5ZGRscFVjOTY0cllnQldvY3d5VWE1TXF2MTBnQlNBUGZ3eUlOZ2RKRm9Ba20ycFJzbzgxbEhNNjF3QUZRbQ?oc=5"
+                },
+                {
+                    "title": "Usman Nurmagomedov hopes brother Umar faces Petr Yan in Abu Dhabi - MMA Junkie",
+                    "date": "Wed, 17 Dec 2025 23:31:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi3wFBVV95cUxPRWJJSTg4cXlEQjg2VDJHQnFWaTJaa04tTGJ5WnVpZU9Nc0JWVkN3N1Zyc3M1NVJuMmF0dzdNRXlmY1pUMHJwTGFSWFI2Qk1GNWYtTG5oeEZIVmRSMlRsQVNDVVZpRG9LN09SSkQySGlpdVU3SzhYeHc3Sl9zUFp4UExrOXF3ajRUT25UYWZ2U1VMZVBiOWtycHlFbk5RV1NYWXEzdVZaWEpuWG5OeG03ME5zWkY5U2I3NXpVLU8wTHdyRkpjS2NwcWJqTG5IMUFiUWlxbVozNHFxYkdnSWl3?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Deiveson Figueiredo | The \u2018True\u2019 God Of War - UFC.com",
+                    "date": "Sat, 11 Oct 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMifEFVX3lxTFBrTGNiM2VuMDZPcjRBQmY2bnJKWGYzX1V4TVJQRHRHbVpfTXU0QUVQZEdoMjBnX0ROMEZNeW9XLWd2Z2N4bW41eFJITFF4NXdRTzIyVUJKUFU2MmJtVGhfX0o2a0ZORjFCbFVHcUY4Q21JVGM0eGNWSURMa0c?oc=5"
+                },
+                {
+                    "title": "UFC Rio results: Deiveson Figueiredo outworks Montel Jackson for emotional split decision - Yahoo Sports",
+                    "date": "Sun, 12 Oct 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi6gFBVV95cUxQT3RUM2xjbWswQU05Q3ZBd2I0T0pWTGQwWlhfYmpfMjI5S0hhREc4ODBhOV9YTmk5Z29sbzJ5dFFQX2tZaDRUaVdZOWpFazJLQ29Rem5nNGNxRVFsYWphR3NpOUQ3OERUOFd4dWVVQ2R4YUhwc1BkY3RMVE4zOXZsaC1xZ0dVX2VZbnJnZ214X3I4T1k3bjMtTER4LTJLaE1kckNHTV9vVDF5a2dFZWQxcmFRZzNiQXk0akZxUDI5LTkyWTA4c3V6UVZoMHFKaTV2eXhBZzM3VjNPN0hoVEktWFFLcXRYODh4Mnc?oc=5"
+                },
+                {
+                    "title": "When Is Deiveson Figueiredo\u2019s Next Fight? - betmgm.com",
+                    "date": "Fri, 28 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiiwFBVV95cUxNU2NUeFJ0UDg2WWhfOUw0bjRHb05ZaGxrZHN2bW50bGlNSVFPUUZwRG94d2xZcXdmaGFJd1NvamF2aFNiWnJVOHRyUG1KcGt3Q0tCa0JXcnB4OUJaRE84UW55aDdkLWJtVnV0SVR5SGI3amp1VXBfRzZTVW02UUstRVBjS2pVNWtyTlBZ?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Ateba Gautier",
+            "Andrey Pulyaev"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/2f815ed5f8278ba6",
+            "http://ufcstats.com/fighter-details/22e07d3da1aa3475"
+        ],
+        "stats": [
+            {
+                "SLpM": "6.57",
+                "Str_Acc": "60%",
+                "SApM": "1.95",
+                "Str_Def": "53%",
+                "TD_Avg": "0.98",
+                "TD_Acc": "100%",
+                "TD_Def": "92%",
+                "Sub_Avg": "0.0",
+                "Nickname": "The Silent Assassin",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "3.81",
+                "Str_Acc": "60%",
+                "SApM": "3.51",
+                "Str_Def": "48%",
+                "TD_Avg": "0.41",
+                "TD_Acc": "16%",
+                "TD_Def": "64%",
+                "Sub_Avg": "0.0",
+                "Nickname": "",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Two-weight champ makes startling admission about UFC's newcomer of the year runner-up after sparring him - Bloody Elbow",
+                    "date": "Mon, 22 Dec 2025 20:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi1gFBVV95cUxQWkpZQmU1cjhnWmJIYV81NGh0MDQweGVmZENGaDVsSzBZdE9mTXhBMzlKZnVIZmJHa0UtRGpjamNUS2ZUZnN1TE1Ja2hWdzl0R2dYQUczLTFjbHZINDQzQUoxZkZIZ21EMFpZcmt0YU15YlVka0ZMbFJpcWdVM2JGNGVmV1F4ZWtzVmFybEpKQi1McHVWdGxFNWlfVlVLMnNjbTgxbzd5T0VSWWtUQk01WkZ4bjBlRGlVVlFLbDJpRE0xTkNJZ0NLTExmU2UtU0p4eC1oZEVn?oc=5"
+                },
+                {
+                    "title": "Ateba Gautier | All Killer, No Filler - UFC.com",
+                    "date": "Wed, 01 Oct 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMieEFVX3lxTE5ucmFJaFVTT3VnWnA3bEg2YVROVFBxU1BJV2lBS0hTYUFnYTlSNFNnYXRSVHJIZjJSWGtoM2h1bTZhRDZSSmlWWGI3SHVMMjRKcGlDTzJLTkh1WldBYVN3OWFGTFpEbkNkSENCVzVYSVNPRTVMdHdLNg?oc=5"
+                },
+                {
+                    "title": "UFC\u2019s hottest knockout machine teases announcement for next fight - Sports Illustrated",
+                    "date": "Tue, 18 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMinAFBVV95cUxPZnBVLURWSUxoM294aktZZnJaMWQzRHZzbXZNblA5NjJmSVF3c09YaUhYNmo5X1B3OWR5YVh5RTNfc0NUcXpsakl6QmNETFB1Z1FNZTBzbkpOdEZQUk9kTjFxQUFCWFpSaHRkVmMyVFVKZEhVMERldmpGdnU2RW01cEJDRVV5THQyTDRrQTZLWFA0aEJ3UEo1VDR2RDk?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Andrey Pulyaev Stops Nick Klein In Round Two | UFC Fight Night: Taira vs Park - UFC.com",
+                    "date": "Sat, 02 Aug 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTFBSaEhnemtzemZ4U2F1Z1JqN0Ezb1kwOW9WU2pCcEMwWmM2UHdJam9pUGtKdlpEaDlTdF9wV2F2ZjRtWWw5R2tB?oc=5"
+                },
+                {
+                    "title": "Andrey Pulyaev Turns It Around In Round 2, Scores TKO Victory - Cageside Press",
+                    "date": "Sat, 02 Aug 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMinwFBVV95cUxOaHhBZFVLUHgtdkl2RHh5Qm5RYlpQcDdja05TMHQtenprRUFJVDBGbHpRRlJjb1pWZEttYXJISFh5WjNOQVBwSjBpYWFMeTl1a3RUSTRFcGRxbmM5RlV4X1ZsOHJTS2dlTEEyemdvVW1QN2h3Qm9fcG52SmM5aFZJd0RfTHMtQnJSMHpLR2lJUUVfSVpsTEk3WFRqTkg3S3M?oc=5"
+                },
+                {
+                    "title": "UFC on ESPN 71 video: Andrey Pulyaev folds Nick Klein for first win in promotion - MMA Junkie",
+                    "date": "Sat, 02 Aug 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxOVmZrbG5pQnVqbEVJSFdlQ0xUVGZEdkk4QjlsUzh6SHUySWxXeVFfMG1uTjE0cm9YWW9ETEFKdkdZZ1hoQnBNeVRWZnRTdHNJd3ZydlZkODhqSUdGWXF6VzhER1BlMzF1a2NBV1E5cEZtRUZOSUtId2JseTRPYk5SOVViOXI2LXJOdWJmNUNubWZyWE4tcG4xWUFZTmpRZ0VwXzdUUFlnMVJFZjA5ZUY4YjljdlYwQ3ZaMkhKd0N3?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Michael Johnson",
+            "Alexander Hernandez"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/511e82663651438d",
+            "http://ufcstats.com/fighter-details/262a7d06203657e6"
+        ],
+        "stats": [
+            {
+                "SLpM": "4.28",
+                "Str_Acc": "39%",
+                "SApM": "3.79",
+                "Str_Def": "58%",
+                "TD_Avg": "0.58",
+                "TD_Acc": "38%",
+                "TD_Def": "81%",
+                "Sub_Avg": "0.0",
+                "Nickname": "The Menace",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "4.31",
+                "Str_Acc": "40%",
+                "SApM": "4.50",
+                "Str_Def": "59%",
+                "TD_Avg": "1.14",
+                "TD_Acc": "36%",
+                "TD_Def": "73%",
+                "Sub_Avg": "0.1",
+                "Nickname": "El Gran Chango",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Michael Johnson | The Climb Continues - UFC.com",
+                    "date": "Fri, 18 Jul 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMid0FVX3lxTFBVRDZoU0tiVzN5M0FlSkFXZGVrV3hHMTE3dFIwMW12VDZSQ2EwU1lsTExwMXZmRW5mcGgta1hVT0ZvRmVKT3VOMDNQbU1YejV2bGw0VXI0SHFENnUxVHNRa2YtRzByZXBwV1pjdWJIVm9hUGdDbHRz?oc=5"
+                },
+                {
+                    "title": "Michael Johnson Happy To Shut People Up, Aims At Holloway - Cageside Press",
+                    "date": "Mon, 21 Jul 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMimgFBVV95cUxQb0lWNV9HRVNad3l2LUdhX29lTUsydno3dHlnYTBhcFBmWnktNVBhUDBOQlpDamx4U19aamxZYkhra3o4VnROZHpEZWVHeFNpS2pWbUhld0haRmItY1RGUVRvbFVpNzlOemZBc29fZko4NUtoSENlYmc1alV1aktJZkk3ODFiNDJydjJnWWJGUk14SXZUUkpla1hn?oc=5"
+                },
+                {
+                    "title": "UFC 318 results: Michael Johnson scores knockdown on Daniel Zellhuber, earns upset win to kick off main card - MMA Fighting",
+                    "date": "Sat, 19 Jul 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi4AFBVV95cUxNZi02UFVLbzZ0ay0ta3djRFRmVll0VWpUeGVscUVUQUw4M3VpX25pMDdidmxOZmE3UzRfYVlmOGVrZElRUWRNOE1HaWt0cndhc0gwY3U2M0FmYmV2VWhybzlHSURIcXR3V3BTZGlJOW4taFlQdkRzS1huSnR5LWhPd0RId0NDV2dLdzJxREtGVjNnRmpGZVkyc1p3U1QydFgyenRlM2o5bFlqdnpNdC1YX0FkM2syRUdxbkYwMERiRDZfdXZ5bnJCRkRVNGIybk5qVDRZTS1aaE1RdFVuSDdfUQ?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Alexander Hernandez Feels Like He Has Nothing To Lose - UFC.com",
+                    "date": "Sat, 13 Sep 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMikgFBVV95cUxOUHZFajdKSm1SRGxkOC1JdVZ6ZjZqd0pPVGdPUEx5a2xmZml3RW5ZUEhKbFBKeThybklpWnc0WFgwRnNCNE42blJYVWZjMGtGRDVwNTVUdEpfdTAxZTBNalpQaDB6UFJJVzEzQnRqTnFtTk9fd2o1WEtlSzFhZ2ZOQ29pXzZnd1lDMVJEVEsxQWotQQ?oc=5"
+                },
+                {
+                    "title": "San Antonio's Alexander Hernandez returns home for Saturday's Noche UFC - KABB",
+                    "date": "Wed, 10 Sep 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMimgFBVV95cUxOVWtyZnY5MjNLX3pFQUloc3V6b016M0xFS2JCcElXOXRzYy1RRGU5T2hvbUtqc0J6YXp2YmIzMU1oOHdXR0tTM2hteld4TDl5MUNKQTJiSlp4aEFjRF9uY19keGgtaTgxVzBPWnFJUExqR1JhU01aT25aYmhJOW5oaDZ4QW43NHhFY0tYUWZaRVFpMzdHTWh5THVR?oc=5"
+                },
+                {
+                    "title": "Noche UFC: Alexander Hernandez on Neck Ailment, \"Sexy Fight\" with Chandler - Cageside Press",
+                    "date": "Mon, 15 Sep 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiggFBVV95cUxOVW01aDRrb056clRXWkI3cVZ1d1RMcnJ3eEFMVXpVaVhvLURHU0FqQnBwWjlrXzBOallKbDlZdlhFZWJLbWhweGtvb3hZQU0ydm1rS3hQNmxQaVVKSDZUMFdqZjFFMDV1WlVneTY0UFBuZXZjVndTTXpXM2F1SlBqaUln?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Nikita Krylov",
+            "Modestas Bukauskas"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/1091d4d957141094",
+            "http://ufcstats.com/fighter-details/476fe566d2df676e"
+        ],
+        "stats": [
+            {
+                "SLpM": "4.31",
+                "Str_Acc": "54%",
+                "SApM": "2.58",
+                "Str_Def": "44%",
+                "TD_Avg": "2.17",
+                "TD_Acc": "38%",
+                "TD_Def": "53%",
+                "Sub_Avg": "1.4",
+                "Nickname": "The Miner",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "3.32",
+                "Str_Acc": "43%",
+                "SApM": "3.93",
+                "Str_Def": "51%",
+                "TD_Avg": "0.30",
+                "TD_Acc": "66%",
+                "TD_Def": "80%",
+                "Sub_Avg": "0.1",
+                "Nickname": "The Baltic Gladiator",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Modestas Bukauskas vs. Nikita Krylov planned for UFC event in January - MMA Fighting",
+                    "date": "Tue, 18 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxORzZoS19LNU1MR0lNQWhza1BCTGF4bW42b2xfRUo5R3FzUlowNS02R1o1ZXBocThVZUVFellzODBKNVZoQzQ1ZWwtQjgtLWZidjUwRFF2dndKekw2bWc0Ri1LS09YN2duX3lySGVaelUxRE1PNEZoVjlDb0ZDUmRldDlJQzFlRi1uaHpnSXhOVVludzBDcndNeHV5MkJLMWtqM04yREQ5YkNkbXM?oc=5"
+                },
+                {
+                    "title": "Full Fight | Dominick Reyes vs Nikita Krylov - UFC.com",
+                    "date": "Sat, 12 Apr 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTE5rM0ZQaXZYLU1ScnhCQ18zeDIxVHdxanhBbVNsYWxxN243OHIyVFhZajZadXFGc2EydmdXQXJybXJfcU53MXRF?oc=5"
+                },
+                {
+                    "title": "Modestas Bukauskas 'very grateful' UFC 324 opportunity - MMA Junkie",
+                    "date": "Wed, 26 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMizAFBVV95cUxQOExjMTFSTXA5Zm5xWmdSdWRqYU1Fdy1qVjNQbE1VQjlGSkZjcll0Y1o0YXRDc1FFVDJ0bzRlZmRSRmpNV0pZVGVxb3hoRVZPb1ZLaTA0ZmlfcGpmQlk2X0loalJxLTRPRHNPS1p4aWs1dHhoNE5CRWN1ald0d2V0MnpiNko3TXZsS05qdjBHVGkyTGE1TmJ6Z2l5QnlMQ3JBWndSQk12cnVjQ29NMU1jV0JxcFYyWU5QRDNkd1luR3FwWUxGZWtvZUdBdTg?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Modestas Bukauskas Always Believed In Himself - UFC.com",
+                    "date": "Fri, 05 Sep 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMihwFBVV95cUxQQ3hFdDFUbEJ2Qnc4RVRWUDBBWmtzWVZSOGNMTGRXdWNmYk5GNkZvU0FUZGc4ZjJIOGJ6WWlVTDZocGRVZnM1b3NtRlBRMXhJQnFOOXdUQWt4d25ZV0VnNF9VaklYdUFVeWxrS01yaHZRcm5mT213V2d6czVLWFhSTGoxSzF1S0E?oc=5"
+                },
+                {
+                    "title": "Modestas Bukauskas vs. Nikita Krylov planned for UFC event in January - MMA Fighting",
+                    "date": "Tue, 18 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxORzZoS19LNU1MR0lNQWhza1BCTGF4bW42b2xfRUo5R3FzUlowNS02R1o1ZXBocThVZUVFellzODBKNVZoQzQ1ZWwtQjgtLWZidjUwRFF2dndKekw2bWc0Ri1LS09YN2duX3lySGVaelUxRE1PNEZoVjlDb0ZDUmRldDlJQzFlRi1uaHpnSXhOVVludzBDcndNeHV5MkJLMWtqM04yREQ5YkNkbXM?oc=5"
+                },
+                {
+                    "title": "UFC Paris: Modestas Bukauskas Says Craig Match-Up in the Making for Years - Cageside Press",
+                    "date": "Fri, 05 Sep 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMifEFVX3lxTE9UTnVIbU9feElwRTltaFI0b3QwanBxQThxWVlEd0JlQ1VhbTlDQXZHcWJjTmQ2Zll5U25VdTJ3OGRZVm1HQ3lzMnYtLXhmbUtudTBLa1dYSUEwd090eERnZFFjLTRyMl9PaVQ3aXNhaHFwQ1JaMXJXWXJNMHY?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Alex Perez",
+            "Charles Johnson"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/ab2b4ff41d6ebe0f",
+            "http://ufcstats.com/fighter-details/814e5233e2acf2ee"
+        ],
+        "stats": [
+            {
+                "SLpM": "4.16",
+                "Str_Acc": "45%",
+                "SApM": "3.22",
+                "Str_Def": "58%",
+                "TD_Avg": "2.28",
+                "TD_Acc": "48%",
+                "TD_Def": "75%",
+                "Sub_Avg": "0.8",
+                "Nickname": "",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "4.73",
+                "Str_Acc": "49%",
+                "SApM": "3.78",
+                "Str_Def": "56%",
+                "TD_Avg": "0.56",
+                "TD_Acc": "20%",
+                "TD_Def": "66%",
+                "Sub_Avg": "0.4",
+                "Nickname": "InnerG",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Alex Perez | Grateful For The Ride - UFC.com",
+                    "date": "Thu, 20 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMidkFVX3lxTFBUeUtmOC1NYkotLUdDVVQ0QVVudWFSZWFGQmg4N3NRaUpIUWhWV3hfWC1TcUxFdnJ6cFJONTJmUVFhcGRrQWswckR5N1JJbEhHNWFMYjgzMk9yMXo2bi1EZVpuck93TEYxcW9WN3llU19wR3ZTc1E?oc=5"
+                },
+                {
+                    "title": "Alex Perez hopes UFC 324 starts path back to flyweight contention - MMA Junkie",
+                    "date": "Fri, 19 Dec 2025 21:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi4wFBVV95cUxNZTVLa3dPYkhvbzhNYW5ZZ09VbGtXSG5nM3FZLTVaek5pU18zY2dVVEtWUVgxUHNSWkdPOTZSeVFhVnYxZ184WnpSZkVSY2hRbXVNbDB1Y1ZHNlExZmFVM0lINDBlQWV2QlZPUUVyLXdNcUR5MVhBSXNJR200ZVJpbDVvVnRYdVd4WVRsYnJfeU1RS2hXRlVNamEtN25YWnUxT1pUSjlYNVdKX2FuUUt4UXpQby1VTmM5OGJTYkNUU3dES21Sdm50aENPTnFwYjNoRVJoSGxDYlZPY1hqS3JLcDFjZw?oc=5"
+                },
+                {
+                    "title": "Asu Almabayev Submits Alex Perez In Round 3 | UFC Qatar - UFC.com",
+                    "date": "Sat, 22 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTFAtbE9RTU9oVmI0Uk9GeVFCQjBIUUpxYVo1bEZLc292NlVpQVJabFBhcVRwX00zREpnZVZoNVd5UkQ2SzI0MTNV?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Charles Johnson | Chasing Something Bigger - UFC.com",
+                    "date": "Wed, 20 Aug 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMihAFBVV95cUxPNTJmb2tFUDNzekNHZ2R6STdSdjZpd2RkdlZGZXFuYXNDbjd2cnp3YUgxeHl2b2gyaHVBODBuR0lvaUJPeXpPS1RrQmtRSmh6M2lOZXRCZkdNQldmUzhxYTVtNXMxbG0wMDhhQ3ZRNWdYQnl1WlBTaUdpNEhlT1NoS1JNajA?oc=5"
+                },
+                {
+                    "title": "Charles Johnson to Meet Former Flyweight No. 1 Contender at UFC 324 - Sherdog",
+                    "date": "Tue, 02 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiqwFBVV95cUxPZzYwMXlOSnZlVnF2MFdJXzVNSEktMk1WOW96cnFpenRiUDRUVnktYTNJN1Bsb0xXWFZfTW4waEg3bEg2b1ltM1BTTThXdVd1ZzFPVWpiejdfczVOSHh2bGFrRE5xVUV4NlRPWl92dm5wVXd0eGw3VENSQU0tbkdMbkVSZDNDRXROdFBJUUlkVWkxNmhmUWZMOUhWY01VemkzN29BVWdhRFo2dVHSAbABQVVfeXFMTk1MZ01nMnJDSzZZM0x3ZTRMMUtjeWdGeGJpMUs1Zm5waEJEQmhtbjZVREloY3ViWl9UMFl1RGJRbW5paDdMeUQtLUtVckFXc2VlczNaci1PbUdlVS0xUDJ4UHRRTUNRaG1ldkZGdC1HZGJsZ0hyTnF3LWg3Q2NraTV5US1DUXViV0dyc2ZYNlJUTHdGYTRfaEVGQ2hnRWQxWk5DOW5FenRnQmEzY0FKUzM?oc=5"
+                },
+                {
+                    "title": "Alex Perez hopes UFC 324 starts path back to flyweight contention - MMA Junkie",
+                    "date": "Fri, 19 Dec 2025 21:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMi4wFBVV95cUxNZTVLa3dPYkhvbzhNYW5ZZ09VbGtXSG5nM3FZLTVaek5pU18zY2dVVEtWUVgxUHNSWkdPOTZSeVFhVnYxZ184WnpSZkVSY2hRbXVNbDB1Y1ZHNlExZmFVM0lINDBlQWV2QlZPUUVyLXdNcUR5MVhBSXNJR200ZVJpbDVvVnRYdVd4WVRsYnJfeU1RS2hXRlVNamEtN25YWnUxT1pUSjlYNVdKX2FuUUt4UXpQby1VTmM5OGJTYkNUU3dES21Sdm50aENPTnFwYjNoRVJoSGxDYlZPY1hqS3JLcDFjZw?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Josh Hokit",
+            "Denzel Freeman"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/955da1675ad58a50",
+            "http://ufcstats.com/fighter-details/b5c19c34f12c917e"
+        ],
+        "stats": [
+            {
+                "SLpM": "5.12",
+                "Str_Acc": "69%",
+                "SApM": "1.42",
+                "Str_Def": "56%",
+                "TD_Avg": "12.80",
+                "TD_Acc": "46%",
+                "TD_Def": "0%",
+                "Sub_Avg": "0.0",
+                "Nickname": "",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "3.27",
+                "Str_Acc": "62%",
+                "SApM": "2.07",
+                "Str_Def": "61%",
+                "TD_Avg": "0.00",
+                "TD_Acc": "0%",
+                "TD_Def": "0%",
+                "Sub_Avg": "0.0",
+                "Nickname": "Luke Fox",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Josh Hokit Octagon Interview | UFC Fight Night: Bonfim vs Brown - UFC.com",
+                    "date": "Sat, 08 Nov 2025 23:13:34 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTE1zcjVObDY5U3VmbmI5NElTWWJZWHNPVFJlVl80bU53R3E5S1hiVVcxVEpBRy1aZ19pbUgyYTlDdVNCbklxbGo4?oc=5"
+                },
+                {
+                    "title": "UFC Vegas 111: Josh Hokit Puts Away Max Gimenis Early, Channels Chael Sonnen in Promo - Cageside Press",
+                    "date": "Sat, 08 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMivgFBVV95cUxQYjFRaXZSVjN5SVdyeFRvUWpkRHlncXJSMFBBQ0dLX0VuMjhDODJpcFpTYjEtaWNuQTZYMS1rb2ZlZ0h6UFZsbHphM2FVX1djX3BTa05DYzlTTThvOEl3R2JEZkIzQjZxV3UxNUZKOTRnTnBKeElyZ3ZBUlFmdTJpYU4tX19vVlk3V3YzU3hySFAzVWoyQkRsSnZiTDZ3QWRkOEZ6Q0FacWNXNEUwcW1SSDhXeUs3bFhTV1VpN2Nn?oc=5"
+                },
+                {
+                    "title": "UFC 324 adds Josh Hokit vs. Denzel Freeman - MMA Junkie",
+                    "date": "Tue, 02 Dec 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMirAFBVV95cUxNWkpGZ1FfMG9TQ1RETDlHZVZKX0ZxWnJoRTNLT2IzOW5yZm9EUUVWZnN5elRJcnVuN2tPMnU1YUJmX1dJVkVieHRyb0JCbW90ZzA1SkNuRllSUktYbzBtNkoxNE9FbkdYZ1hCTElXR2NMWG9qUGkxQ0VSVFRranFMUm1neFJ2LTRvVk80NEVuUjFNT3BoTkpJRFFHYjJNS3JKMk1oTHpPNFdjYjdV?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "UFC Qatar: Denzel Freeman Tops Marek Bujlo In Plodding Battle of Newcomers - Cageside Press",
+                    "date": "Sat, 22 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMisAFBVV95cUxOR1E4aUdwSjF4b2tvQ3hKNEx3QzlEZEJFemVaTC13TGNCcllsTXJSLU8wQXhzSDJCTzNvYXdWTzh4MzBPVFF3SHpJWlphYmlEWm1nNEoyUnhuNmVDcmp3Q1hPdmJISGdHMk1nSVpRbG1vc29BWERXN0tTUTVHNmttNW1fMHhDOFdsajRnU3UxdjB1MTRFcjh1Ylk1OUdIWm84U3hLemJlNzF4MC1HcXN2Ng?oc=5"
+                },
+                {
+                    "title": "Denzel Freeman Post-Fight Interview | UFC Qatar - UFC.com",
+                    "date": "Sat, 22 Nov 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTFAweWVCUk5DMVVOSi1LaHUwZ1J1QzIxdnBwd0ljS1doWUpBWTVrVFkzNVI4QXVnaVNwQld2OUJYUm1sc0QyTzJV?oc=5"
+                },
+                {
+                    "title": "UFC signs LFA champ 'Luke Fox' Denzel Freeman - MMA Junkie",
+                    "date": "Thu, 25 Sep 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiuAFBVV95cUxOZzdIODlwQ1pQbFVqNTJqTU00S3RTOEtBc0Zzb1g4V3NMR3RRWXVoQXpxQmdTQWhEQ3pWUFhsOENqWENPakJyeU9oRjRfcXVvdExjdmtEaFBYVzRzMTdIYW1xZm5ab29NbV9DQ3c5eDF1UGdtVTNtUGlFUUxuSHZ4dXBJV1VCSWdCREJjazJyZFFrWTNBWTFmdENzVVJ2WXpKSkJLYzFTOENBRTY0Zi16dDdFaExvTGxB?oc=5"
+                }
+            ]
+        ]
+    },
+    {
+        "fighters": [
+            "Ricky Turcios",
+            "Cameron Smotherman"
+        ],
+        "urls": [
+            "http://ufcstats.com/fighter-details/cd3d7e37ff2d679c",
+            "http://ufcstats.com/fighter-details/5c84f673b7bb7c15"
+        ],
+        "stats": [
+            {
+                "SLpM": "4.73",
+                "Str_Acc": "40%",
+                "SApM": "3.72",
+                "Str_Def": "52%",
+                "TD_Avg": "0.91",
+                "TD_Acc": "20%",
+                "TD_Def": "44%",
+                "Sub_Avg": "0.4",
+                "Nickname": "",
+                "Image_URL": null
+            },
+            {
+                "SLpM": "4.07",
+                "Str_Acc": "37%",
+                "SApM": "3.52",
+                "Str_Def": "58%",
+                "TD_Avg": "0.00",
+                "TD_Acc": "0%",
+                "TD_Def": "62%",
+                "Sub_Avg": "0.0",
+                "Nickname": "The Baby-Faced Killa",
+                "Image_URL": null
+            }
+        ],
+        "news": [
+            [
+                {
+                    "title": "Ricky Turcios Fight Week Interview | UFC 311 - UFC.com",
+                    "date": "Thu, 16 Jan 2025 02:14:03 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMiR0FVX3lxTFB2NEJQdENsWnlBaE9XNmZ4bEdNMVFtODVsZFY5Y21nNVAyRkJ2aDRpUlZYY1I1cXpqVzdqcnZWVU40TjhlNll3?oc=5"
+                },
+                {
+                    "title": "UFC 311: Benardo Sopaj Bests Ricky Turcios in Scrappy Fight - Cageside Press",
+                    "date": "Sat, 18 Jan 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMinAFBVV95cUxOdU5xTnc0RkNjVkVhNDFwckRYRjFRUERMNUpUVC03RlBBUU0yVUdHTllfRzBmVEFUV3hWeEhURG5lNTNnQ2dqSExYSjZaUXRUSjRNdlBPeURSWmR5eVozZVdLQzltdFNJUl9OZjVDV1BSUTBKYk5oek83WWRBMWRnMTRFeVdNaGNESmg0aGlxT3lsM19uN3JmaEowWlM?oc=5"
+                },
+                {
+                    "title": "Bernardo Sopaj def. Ricky Turcios at UFC 311: Best photos - Yahoo Sports",
+                    "date": "Sun, 19 Jan 2025 08:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMifEFVX3lxTE4wSDB6WldTQ1N2SXZ2dXNGWWNBOU9FNjktMXJmV2JibExQN2FCOVNFV2dTWkRvMHNULWVabzE2MHNmemJacUJRUm1NQ2RyV3J6V1pGVGw4YnZaYno5Q0dLczNfUVhVOWM2dzgwVE9PWFlpZldLc0dxMjZVdm4?oc=5"
+                }
+            ],
+            [
+                {
+                    "title": "Cameron Smotherman | Driven With Fresh Perspective - UFC.com",
+                    "date": "Sat, 03 May 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMikgFBVV95cUxNRndENVJZaUthOG15c2hSRUpHOUpscVpNU09sc2RhZkZySnFoRXJ0ZklYelV2RWZjeFo5SVJiZVJHd0diYURLLXdhS3JhUEV2NVZfbFlEcnRzdFpmYkEyWEhFWno1VUxGclkxSEFqLVd4SUJBVmZCVzJBTkd5Wlc4Z0I4LVF0UWhnUkZmRXU4ZVZBQQ?oc=5"
+                },
+                {
+                    "title": "When is the next UFC event? - The Independent",
+                    "date": "Mon, 22 Dec 2025 11:35:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMikAFBVV95cUxPdjFiUW56WnBUQWhaeWJLbU56V3NYRFRNYVRNQVZsa2Zaa2pVVGYtYjRFaHRaakJHZV82NFpuQkxBY3ZxZHpoMGFZd2Y4ZXVfemtWMnoySTQwbm1mZ19jWmFER3VEN2lCS0NpekpRZmlPN3Nza1NEUm5IUVlqUmRMQ2c5Wlh5bVVuLTh4dWRSQ1M?oc=5"
+                },
+                {
+                    "title": "UFC Atlanta: Ricky Simon Cruises to Comfortable Win Over Cameron Smotherman - Cageside Press",
+                    "date": "Sat, 14 Jun 2025 07:00:00 GMT",
+                    "link": "https://news.google.com/rss/articles/CBMisgFBVV95cUxNU3Fxc0Q1eEZEMEhYbTJjcWd1NE5KcXdWcUdmSU5JeFhIR19BRnYta2Vha2MyOVhZR1RYUjViLTJVVWM0bzZhWmhwc0tSRGZKa2ZubjlEWHU0WFZIOUgxTHRDODlpekJtUTQ0c3k4aVRJUmRDV0JHV0xGck9YeU5aaHJpT2RwdzAycjZfcjJLTHQ0OThwenB5dnhIN3l2UG9idmNjNl9xbXdud3RWQTRGa01B?oc=5"
+                }
+            ]
+        ]
+    }
+]

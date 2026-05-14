@@ -7,6 +7,7 @@ import difflib
 import urllib.parse
 import sys
 import os
+import re
 
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -98,6 +99,18 @@ class SmartScraper:
                 if "TD Acc.:" in text: metrics['TD_Acc'] = text.split("TD Acc.:")[1].strip()
                 if "TD Def.:" in text: metrics['TD_Def'] = text.split("TD Def.:")[1].strip()
                 if "Sub. Avg.:" in text: metrics['Sub_Avg'] = text.split("Sub. Avg.:")[1].strip()
+
+            # Tale of the tape (same page — used when deep_dive row layout differs)
+            for item in soup.find_all("li", class_=re.compile(r"b-list__box-list-item")):
+                text = " ".join(item.get_text().split())
+                if "Height:" in text:
+                    metrics["Height"] = text.split("Height:", 1)[1].strip()
+                elif "Weight:" in text:
+                    metrics["Weight"] = text.split("Weight:", 1)[1].strip()
+                elif "Reach:" in text:
+                    metrics["reach"] = text.replace("Reach:", "").strip()
+                elif "STANCE:" in text.upper() or "stance:" in text.lower():
+                    metrics["stance"] = text.split(":", 1)[-1].strip()
 
             # B. LAKAP (Nickname)
             nickname = ""

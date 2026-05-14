@@ -3,8 +3,6 @@ FightIQ Configuration
 Centralized configuration for thresholds, magic numbers, and settings
 """
 
-import os
-
 # ==========================================
 # FIGHTER SELECTION THRESHOLDS
 # ==========================================
@@ -21,7 +19,6 @@ HISTORY_MIN_WINS = 10              # Absolute minimum
 
 # Standard Mode
 STANDARD_MIN_WINS = 10             # Minimum wins for standard content
-STANDARD_MIN_WINS_RELAXED = 5      # Relaxed minimum wins for fallback
 
 # Anomaly Mode
 ANOMALY_ODDS_THRESHOLD = 2.20      # Minimum odds for underdog value
@@ -48,10 +45,8 @@ BETIST_RETRY_DELAY = 2             # Seconds between retries
 # NAME MATCHING
 # ==========================================
 
-FUZZY_MATCH_CUTOFF = 0.8           # Primary High Confidence
-FUZZY_MATCH_CUTOFF_MEDIUM = 0.75   # Betist/Smart Match
-FUZZY_MATCH_CUTOFF_RELAXED = 0.7   # General Relaxed
-FUZZY_MATCH_CUTOFF_LOW = 0.6       # BFO/Fallback Low Confidence
+FUZZY_MATCH_CUTOFF = 0.8           # Increased from 0.6 for better accuracy
+FUZZY_MATCH_CUTOFF_RELAXED = 0.7   # Fallback cutoff
 
 # ==========================================
 # FIGHT WEEK CONFIG
@@ -73,33 +68,20 @@ ORACLE_MAX_WINS_DIFFERENCE = 5     # Max difference in wins for comparable fight
 ORACLE_PREFER_TRENDING = True       # Prioritize trending fighters
 
 # ==========================================
-# LIVE WIRE (COMMENTARY) CONFIG
-# ==========================================
-
-LIVE_WIRE_POLL_INTERVAL = 60       # Seconds between checks in continuous mode
-SPOTLIGHT_HISTORY_DAYS = 90        # Days to look back for content history
-
-# ==========================================
 # CONTENT GENERATION (GOD MODE - Phase 3)
 # ==========================================
 
 # PRIMARY AI MODELS - Maximum Intelligence & Reasoning
-# Primary: User-specified. Fallbacks: confirmed working via live API test (2026-03-26)
 GEMINI_MODELS = [
-    "models/gemini-3.1-pro-preview",    # PRIMARY (God Mode) — confirmed 2026-05-14
-    "models/gemini-2.5-pro",            # SECONDARY — confirmed 2026-05-14
-    "models/gemini-2.5-flash",          # FALLBACK — confirmed 2026-05-14
+    "models/gemini-3-pro-preview",           # PRIMARY: The smartest model available (Gemini 3)
+    "models/deep-research-pro-preview-12-2025", # SECONDARY: Specialized for deep stats/betting analysis
+    "models/gemini-exp-1206",                # TERTIARY: Advanced experimental reasoning
+    "models/gemini-2.0-flash-thinking-exp",  # QUATERNARY: Good backup with chain-of-thought
+    "models/gemini-1.5-pro-latest"           # ULTIMATE FALLBACK: Always available
 ]
 
-# Image generation (Gemini API). Override with env FIGHTIQ_IMAGEN_MODEL if needed.
-# Old preview id often 404s on v1beta; fallbacks tried in core.imagen_utils.
-IMAGEN_MODEL = os.environ.get("FIGHTIQ_IMAGEN_MODEL", "imagen-3.0-generate-002")
-IMAGEN_MODEL_FALLBACKS = [
-    "imagen-3.0-fast-generate-001",
-    "imagen-3.0-generate-001",
-    "models/imagen-3.0-generate-002",
-    "models/imagen-4.0-generate-preview-06-06",
-]
+# Image Generation (Nano Banana) - Confirmed Available
+IMAGEN_MODEL = "models/imagen-4.0-generate-preview-06-06"
 
 # AI Configuration
 AI_TEMPERATURE = 0.4  # Increased for creative reasoning (was 0.2)
@@ -124,9 +106,9 @@ BRAND_COLORS = {
 
 # Font Paths
 FONT_PATHS = {
-    "headline": "assets/fonts/BebasNeue-Regular.ttf",      # Headlines/Titles
-    "body_bold": "assets/fonts/Roboto-Bold.ttf",           # Body Bold
-    "body_regular": "assets/fonts/Roboto-Regular.ttf"      # Body Regular
+    "headline": "fonts/BebasNeue-Regular.ttf",      # Headlines/Titles
+    "body_bold": "fonts/Roboto-Bold.ttf",           # Body Bold
+    "body_regular": "fonts/Roboto-Regular.ttf"      # Body Regular
 }
 
 # ==========================================

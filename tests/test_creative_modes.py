@@ -1,36 +1,35 @@
+"""
+FightIQ Creative Modes Test
+Tests all 5 IDLE content modes with mocked AI and visual dependencies.
+Does NOT make real Gemini/scraping calls.
+"""
+
 import sys
 import os
 import json
-import random
 from unittest.mock import MagicMock, patch
 
-# Add project root to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, PROJECT_ROOT)
+
+from core.paths import get_data_path
 
 import importlib.util
 
-# Import the module dynamically to be able to mock things
-spec = importlib.util.spec_from_file_location("SpotlightEngine", "09_spotlight_engine.py")
-SpotlightEngine = importlib.util.module_from_spec(spec)
+_spec = importlib.util.spec_from_file_location(
+    "SpotlightEngine",
+    os.path.join(PROJECT_ROOT, "modules", "_09_spotlight_engine.py")
+)
+SpotlightEngine = importlib.util.module_from_spec(_spec)
 sys.modules["SpotlightEngine"] = SpotlightEngine
-spec.loader.exec_module(SpotlightEngine)
+_spec.loader.exec_module(SpotlightEngine)
 
-def mock_scrape(url):
-    print(f"   [MOCK] Scraping {url}")
-    return {
-        "name": "Test Fighter",
-        "record": "20-5-0",
-        "wins": 20, "losses": 5,
-        "slpm": "5.50", "sub_avg": "1.0", "str_acc": "70%", "td_avg": "2.0",
-        "url": url
-    }
 
-def mock_generate_content(prompt, generation_config=None):
-    print("   [MOCK] Gemini Generating content...")
+def _mock_ai_response(client, model_name, prompt):
+    """Return mode-appropriate mock AI content."""
     mock_resp = MagicMock()
-    # Return valid JSON text based on prompt keywords to simulate different modes
     if "ORACLE" in prompt:
-         data = {
+        data = {
             "main_tweet": "Oracle Predicts!",
             "stat_reply": "Winner is X",
             "card_stats": {"power": 90, "grappling": 90, "stamina": 90, "technique": 90, "one_liner": "Oracle"},
@@ -50,7 +49,7 @@ def mock_generate_content(prompt, generation_config=None):
             "card_stats": {"power": 70, "grappling": 70, "stamina": 70, "technique": 70, "one_liner": "Anomaly"},
             "video_script": "Anomaly script"
         }
-    elif "LEGEND STATUS" in prompt or "Historian" in prompt:
+    elif "LEGEND STATUS" in prompt or "Historian" in prompt or "HISTORY" in prompt:
         data = {
             "main_tweet": "LEGEND STATUS!",
             "stat_reply": "Hall of Fame",
@@ -67,42 +66,45 @@ def mock_generate_content(prompt, generation_config=None):
     mock_resp.text = json.dumps(data)
     return mock_resp
 
+
 def test_mode(mode_name):
     print(f"\n🧪 TESTING MODE: {mode_name}")
-    
-    # Mocking
-    SpotlightEngine.scrape_fighter_detailed = mock_scrape
-    
+
+    # Patch heavy dependencies
+    SpotlightEngine.scrape_fighter_detailed = lambda url: {
+        "name": "Test Fighter", "record": "20-5-0",
+        "wins": 20, "losses": 5,
+        "slpm": "5.50", "sub_avg": "1.0", "str_acc": "70%", "td_avg": "2.0",
+        "url": url
+    }
     SpotlightEngine.VisualEngine = MagicMock()
-    #SpotlightEngine.VisualEngine.create_stat_card.return_value = None
-    
     SpotlightEngine.VideoEngine = MagicMock()
     SpotlightEngine.VideoEngine.create_reel.return_value = "mock_video.mp4"
-    
-    mock_model = MagicMock()
-    mock_model.generate_content.side_effect = mock_generate_content
-    SpotlightEngine.get_gemini_model = MagicMock(return_value=mock_model)
-    
-    # Force Mode
-    if mode_name == "STANDARD": weights = [1, 0, 0, 0, 0]
-    elif mode_name == "VIOLENCE": weights = [0, 1, 0, 0, 0]
-    elif mode_name == "ORACLE": weights = [0, 0, 1, 0, 0]
-    elif mode_name == "ANOMALY": weights = [0, 0, 0, 1, 0]
-    elif mode_name == "HISTORY": weights = [0, 0, 0, 0, 1]
-    
-    with patch('random.choices', return_value=[mode_name]):
+    SpotlightEngine.generate_with_retry = _mock_ai_response
+
+    with patch("random.choices", return_value=[mode_name]):
         SpotlightEngine.main()
-        
-    # Check Output
-    with open("spotlight_ready.json", "r") as f:
+
+    # Verify output was written to data/spotlight_ready.json
+    output_path = get_data_path("spotlight_ready.json")
+    assert os.path.exists(output_path), f"spotlight_ready.json not found at {output_path}"
+
+    with open(output_path, "r", encoding="utf-8") as f:
         data = json.load(f)
-        
-    print(f"   ✅ Output Type Check: {data['thread'][0]}")
+
+    assert "thread" in data, "Output missing 'thread' key"
+    print(f"   ✅ Mode {mode_name} OK: {data['thread'][0][:60]}...")
+
 
 if __name__ == "__main__":
+    print("=" * 60)
+    print("🧪 FIGHTIQ CREATIVE MODES TEST")
+    print("=" * 60)
+
     test_mode("STANDARD")
     test_mode("VIOLENCE")
     test_mode("ORACLE")
     test_mode("ANOMALY")
     test_mode("HISTORY")
+
     print("\n✅ ALL MODES PASSED!")

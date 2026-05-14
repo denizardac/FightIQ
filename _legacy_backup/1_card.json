@@ -1,0 +1,61 @@
+{
+    "event": "UFC 324: Gaethje vs. Pimblett",
+    "date": "2026-01-24",
+    "status": "IDLE",
+    "days_until": 32,
+    "url": "http://ufcstats.com/event-details/00e11b5c8b7bfeeb",
+    "fights": [
+        {
+            "f1": "Justin Gaethje",
+            "f2": "Paddy Pimblett"
+        },
+        {
+            "f1": "Kayla Harrison",
+            "f2": "Amanda Nunes"
+        },
+        {
+            "f1": "Sean O'Malley",
+            "f2": "Song Yadong"
+        },
+        {
+            "f1": "Waldo Cortes Acosta",
+            "f2": "Derrick Lewis"
+        },
+        {
+            "f1": "Arnold Allen",
+            "f2": "Jean Silva"
+        },
+        {
+            "f1": "Natalia Silva",
+            "f2": "Rose Namajunas"
+        },
+        {
+            "f1": "Umar Nurmagomedov",
+            "f2": "Deiveson Figueiredo"
+        },
+        {
+            "f1": "Ateba Gautier",
+            "f2": "Andrey Pulyaev"
+        },
+        {
+            "f1": "Michael Johnson",
+            "f2": "Alexander Hernandez"
+        },
+        {
+            "f1": "Nikita Krylov",
+            "f2": "Modestas Bukauskas"
+        },
+        {
+            "f1": "Alex Perez",
+            "f2": "Charles Johnson"
+        },
+        {
+            "f1": "Josh Hokit",
+            "f2": "Denzel Freeman"
+        },
+        {
+            "f1": "Ricky Turcios",
+            "f2": "Cameron Smotherman"
+        }
+    ]
+}

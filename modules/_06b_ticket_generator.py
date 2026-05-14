@@ -10,21 +10,23 @@ PHILOSOPHY: AI for art, PIL for data accuracy
 
 import json
 import os
+import re
 import sys
 from PIL import Image, ImageDraw, ImageFont
 from google import genai
 from google.genai import types
 from dotenv import load_dotenv
-import io
 
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR
+from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR, PROJECT_ROOT
+from core.odds_converter import american_to_decimal
+from core.imagen_utils import generate_imagen_image
+
 try:
     import core.config as config
-    IMAGEN_MODEL = config.IMAGEN_MODEL
 except Exception:
-    IMAGEN_MODEL = "models/imagen-4.0-generate-preview-06-06"
+    config = None
 
 OUTPUT_DIR = VISUALS_DIR
 INPUT_FILE = get_data_path("4_parlays.json")
@@ -35,8 +37,8 @@ try:
 except:
     pass
 
-# Initialize
-load_dotenv()
+# Initialize (.env next to project root — cwd-independent)
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 api_key = os.getenv("GEMINI_API_KEY")
 client = genai.Client(api_key=api_key) if api_key else None
 
@@ -94,21 +96,34 @@ Vertical format 1080x1350px.""",
 # FONT LOADING
 # ===========================================
 def load_font(font_key, size):
-    """Load font with fallback"""
-    font_paths = {
-        "headline": "assets/fonts/BebasNeue-Regular.ttf",
-        "body": "assets/fonts/Roboto-Bold.ttf",
-        "regular": "assets/fonts/Roboto-Regular.ttf"
+    """Load bundled fonts from project root (VPS-safe); fall back to Arial."""
+    defaults = {
+        "headline": os.path.join(ASSETS_DIR, "fonts", "BebasNeue-Regular.ttf"),
+        "body": os.path.join(ASSETS_DIR, "fonts", "Roboto-Bold.ttf"),
+        "regular": os.path.join(ASSETS_DIR, "fonts", "Roboto-Regular.ttf"),
     }
-    
+    path = defaults.get(font_key, defaults["body"])
     try:
-        return ImageFont.truetype(font_paths.get(font_key, font_paths["body"]), size)
-    except:
-        try:
-            # Windows fallback
-            return ImageFont.truetype("arial.ttf", size)
-        except:
-            return ImageFont.load_default()
+        if config and hasattr(config, "FONT_PATHS"):
+            cfg_key = {"headline": "headline", "body": "body_bold", "regular": "body_regular"}.get(font_key, font_key)
+            rel = config.FONT_PATHS.get(cfg_key) or config.FONT_PATHS.get("body_bold")
+            if rel:
+                path = rel if os.path.isabs(rel) else os.path.join(PROJECT_ROOT, *rel.replace("/", os.sep).split(os.sep))
+    except Exception:
+        pass
+    try:
+        if path and os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    except Exception:
+        pass
+    try:
+        return ImageFont.truetype("C:/Windows/Fonts/arialbd.ttf", size)
+    except Exception:
+        pass
+    try:
+        return ImageFont.truetype("arial.ttf", size)
+    except Exception:
+        return ImageFont.load_default()
 
 # ===========================================
 # BACKGROUND GENERATION
@@ -133,27 +148,19 @@ def get_or_generate_background(slip_type):
     
     theme = BACKGROUND_PROMPTS.get(slip_type, BACKGROUND_PROMPTS["safe"])
     print(f"   🎨 Generating AI background: {theme['theme_name']}...")
-    
-    try:
-        response = client.models.generate_images(
-            model=IMAGEN_MODEL,
-            prompt=theme["prompt"],
-            config=types.GenerateImagesConfig(number_of_images=1)
-        )
-        
-        if response.generated_images:
-            image_data = response.generated_images[0].image.image_bytes
-            bg = Image.open(io.BytesIO(image_data)).convert("RGB")
-            bg = bg.resize((1080, 1600), Image.LANCZOS) # New taller canvas
-            
-            # Cache for future use
-            bg.save(cache_path, "PNG")
-            print(f"   ✅ Background generated and cached ($0.04)")
-            return bg
-    
-    except Exception as e:
-        print(f"   ⚠️ AI generation failed: {e}")
-    
+
+    bg = generate_imagen_image(
+        client,
+        theme["prompt"],
+        types.GenerateImagesConfig(number_of_images=1),
+    )
+    if bg is not None:
+        bg = bg.resize((1080, 1600), Image.LANCZOS)
+        bg.save(cache_path, "PNG")
+        print(f"   ✅ Background generated and cached ($0.04)")
+        return bg
+
+    print(f"   ⚠️ AI generation failed for all Imagen models, using gradient fallback")
     return create_gradient_background(slip_type)
 
 def create_gradient_background(slip_type):
@@ -196,44 +203,78 @@ def create_gradient_background(slip_type):
 # DATA EXTRACTION
 # ===========================================
 def extract_odds(pick):
-    """Extract odds from pick data"""
-    if 'odds' in pick and pick['odds']:
-        try:
-            return float(pick['odds'])
-        except:
-            pass
-            
-    pick_text = pick.get('pick', '')
-    reason = pick.get('reason', '')
-    
-    # Try to extract from @ symbol
-    if '@' in pick_text:
-        try:
-            return float(pick_text.split('@')[1].strip().split()[0])
-        except:
-            pass
-    
-    if '@' in reason:
-        try:
-            return float(reason.split('@')[1].strip().split()[0])
-        except:
-            pass
-    
-    # Estimate from confidence
-    if 'confidence' in reason.lower():
-        if '10' in reason or '9' in reason:
-            return 1.45
-        elif '8' in reason:
-            return 1.65
-    
-    return 1.50  # Default
+    """Extract decimal odds from pick (float, dict with decimal/american, or @ in text)."""
+    raw = pick.get("odds")
+    if raw is not None and raw != "" and raw != 0:
+        if isinstance(raw, dict):
+            if raw.get("decimal") is not None:
+                try:
+                    d = float(raw["decimal"])
+                    if d > 1.0:
+                        return round(d, 2)
+                except (TypeError, ValueError):
+                    pass
+            if raw.get("american") is not None:
+                try:
+                    d = american_to_decimal(str(raw["american"]).replace("+", ""))
+                    if d > 1.0:
+                        return round(d, 2)
+                except Exception:
+                    pass
+        elif isinstance(raw, str):
+            s = raw.strip().replace(",", ".")
+            if s.startswith(("+", "-")) and re.match(r"^[+-]\d{3,}$", s):
+                try:
+                    d = american_to_decimal(s)
+                    if d > 1.0:
+                        return round(d, 2)
+                except Exception:
+                    pass
+            try:
+                d = float(s)
+                if d > 50:
+                    d = american_to_decimal(int(d))
+                if 1.01 <= d <= 100:
+                    return round(d, 2)
+            except (TypeError, ValueError):
+                pass
+        else:
+            try:
+                d = float(raw)
+                if d > 50:
+                    d = american_to_decimal(int(d))
+                if 1.01 <= d <= 100:
+                    return round(d, 2)
+            except (TypeError, ValueError):
+                pass
+
+    pick_text = pick.get("pick", "") or ""
+    reason = pick.get("reason", "") or ""
+
+    for blob in (pick_text, reason):
+        if "@" in blob:
+            try:
+                tail = blob.split("@", 1)[1].strip().split()
+                if tail:
+                    d = float(tail[0].replace(",", "."))
+                    if 1.01 <= d <= 100:
+                        return round(d, 2)
+            except (IndexError, ValueError, TypeError):
+                pass
+
+    return None
+
 
 def calculate_parlay_odds(slip_data):
-    """Calculate total parlay odds"""
+    """Product of valid decimal odds only (no fabricated defaults)."""
     total = 1.0
+    n = 0
     for pick in slip_data[:5]:
-        total *= extract_odds(pick)
-    return round(total, 2)
+        o = extract_odds(pick)
+        if o is not None and o > 1.0:
+            total *= o
+            n += 1
+    return round(total, 2) if n else 1.0
 
 def format_match_name(match):
     """Format match for display"""
@@ -305,6 +346,7 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
         match = pick.get('match', 'Unknown')
         pick_text = pick.get('pick', 'Unknown')
         odds = extract_odds(pick)
+        odds_label = f"@ {odds:.2f}" if (odds is not None and odds > 1.0) else "@ —"
         match_display = format_match_name(match)
         
         fighters = match.split(' vs ')
@@ -400,9 +442,9 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
         
         # Layer 3: Odds (Perfectly centered underneath string)
         odds_y = pick_y + 42 # Generous gap allowing Odds to sit naturally
-        font_odds_side_dyn = scale_font_to_fit("headline", 38, f"@ {odds:.2f}", max_width)
-        draw.text((center_x + 2, odds_y + 2), f"@ {odds:.2f}", font=font_odds_side_dyn, fill="#000000", anchor="mt")
-        draw.text((center_x, odds_y), f"@ {odds:.2f}", font=font_odds_side_dyn, fill=accent, anchor="mt")
+        font_odds_side_dyn = scale_font_to_fit("headline", 38, odds_label, max_width)
+        draw.text((center_x + 2, odds_y + 2), odds_label, font=font_odds_side_dyn, fill="#000000", anchor="mt")
+        draw.text((center_x, odds_y), odds_label, font=font_odds_side_dyn, fill=accent, anchor="mt")
         
         y += 195 # MASSIVE margin between boxes to accommodate the taller box and 200px portrait bursts
     

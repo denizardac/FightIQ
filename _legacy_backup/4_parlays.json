@@ -1,0 +1,46 @@
+{
+    "safe_slip": [
+        {
+            "match": "Topuria vs Holloway",
+            "pick": "Ilia Topuria ML",
+            "reason": "High Confidence (10/10). Topuria's power gives him edge..."
+        },
+        {
+            "match": "Whittaker vs Chimaev",
+            "pick": "Khamzat Chimaev ML",
+            "reason": "High Confidence (9/10). Wrestling dominance expected..."
+        },
+        {
+            "match": "Ankalaev vs Rakic",
+            "pick": "Magomed Ankalaev ML",
+            "reason": "High Confidence (8/10). Technical fight, low finish probability..."
+        }
+    ],
+    "violence_slip": [
+        {
+            "match": "Topuria vs Holloway",
+            "pick": "Fight Does NOT Go Distance / Under 2.5",
+            "reason": "Violence Score: 85/100. Finish likely."
+        },
+        {
+            "match": "Whittaker vs Chimaev",
+            "pick": "Fight Does NOT Go Distance / Under 2.5",
+            "reason": "Violence Score: 95/100. Finish likely."
+        }
+    ],
+    "value_slip": [
+        {
+            "match": "Topuria vs Holloway",
+            "pick": "Ilia Topuria by KO/TKO",
+            "reason": "AI Detected Market Inefficiency"
+        },
+        {
+            "match": "Whittaker vs Chimaev",
+            "pick": "Chimaev by Submission Round 1",
+            "reason": "AI Detected Market Inefficiency"
+        }
+    ],
+    "metadata": {
+        "total_analyzed": 3
+    }
+}
