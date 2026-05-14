@@ -133,13 +133,18 @@ class SocialDirector:
             if media_path and os.path.exists(str(media_path)):
                 print(f"   🖼️ Uploading: {os.path.basename(str(media_path))}")
                 try:
-                    media = await self._twitter.upload_media(str(media_path))
-                    if hasattr(media, 'media_id'):
-                        media_ids = [media.media_id]
-                    elif isinstance(media, str):
-                        media_ids = [media]
+                    media_id_result = await self._twitter.upload_media(str(media_path))
+                    print(f"   📦 upload_media returned: {type(media_id_result).__name__} = {media_id_result!r}")
+                    if hasattr(media_id_result, 'media_id'):
+                        media_ids = [media_id_result.media_id]
+                    elif isinstance(media_id_result, str):
+                        media_ids = [media_id_result]
+                    elif isinstance(media_id_result, int):
+                        media_ids = [str(media_id_result)]
+                    else:
+                        print(f"   ⚠️ Unknown media result type, skipping image")
                 except Exception as e:
-                    print(f"   ⚠️ Media upload failed: {e}")
+                    print(f"   ⚠️ Media upload failed: {type(e).__name__}: {e}")
 
             reply_to_param = None
             if reply_to_id and str(reply_to_id).isdigit():
