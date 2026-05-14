@@ -22,12 +22,9 @@ if not auth_token or not ct0:
     print("❌ auth_token and ct0 are required.")
     sys.exit(1)
 
-cookies = [
-    {"name": "auth_token", "value": auth_token, "domain": ".x.com", "path": "/", "secure": True, "httpOnly": True, "sameSite": "None"},
-    {"name": "ct0",        "value": ct0,        "domain": ".x.com", "path": "/", "secure": True, "httpOnly": False, "sameSite": "Lax"},
-]
+cookies = {"auth_token": auth_token, "ct0": ct0}
 if twid:
-    cookies.append({"name": "twid", "value": twid, "domain": ".x.com", "path": "/", "secure": True, "httpOnly": True, "sameSite": "None"})
+    cookies["twid"] = twid
 
 os.makedirs(os.path.dirname(COOKIES_FILE), exist_ok=True)
 with open(COOKIES_FILE, "w") as f:
@@ -44,11 +41,12 @@ try:
     async def test():
         c = Client("en-US")
         c.load_cookies(COOKIES_FILE)
-        me = await c.get_user_by_screen_name("FightIQBot")
-        return me
+        tweet = await c.create_tweet(text="FightIQ setup test - will delete")
+        return tweet
 
-    user = asyncio.run(test())
-    print(f"✅ Connected as: @{user.screen_name} ({user.name})")
+    tweet = asyncio.run(test())
+    print(f"✅ Tweet posted! ID: {tweet.id}")
+    print("   -> Delete this test tweet from Twitter manually.")
 except Exception as e:
     print(f"⚠️  Connection test failed: {e}")
     print("   Cookies saved but login might need verification.")
