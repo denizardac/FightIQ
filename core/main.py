@@ -250,6 +250,14 @@ def main():
             save_pipeline_report()
             return
         
+        # Prefetch fighter portraits from multiple sources before visual gen
+        try:
+            logger.info("Pre-fetching fighter portraits (parallel multi-source)")
+            from tools.prefetch_fighter_images import main as prefetch_main
+            prefetch_main()
+        except Exception as e:
+            logger.warning(f"Portrait prefetch had issues (continuing): {e}")
+        
         if not run_module("06_visual_engine.py"): 
             logger.error("Visual Engine failed")
             save_pipeline_report()

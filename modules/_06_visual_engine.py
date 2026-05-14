@@ -86,35 +86,195 @@ def load_font(font_key, size, fallback_bold=True):
     return ImageFont.load_default()
 
 class ImageHunter:
+    """Multi-source fighter portrait hunter with robust fallback chain.
+
+    Source order:
+        1. Local cache (assets/images_cache/<name>.png)
+        2. UFC.com athlete page (hero-profile__image)
+        3. UFCStats.com fighter page (search → profile photo)
+        4. Wikipedia (search → infobox image)
+        5. Sherdog (search → fighter photo)
+        6. None (caller falls back to silhouette)
+
+    Every successful fetch is cached so the next run is offline-fast.
+    Negative results are remembered in-memory (per process) to skip retries.
+    """
+
+    DESKTOP_UA = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36"
+    )
+
     def __init__(self):
-        if not os.path.exists(IMG_CACHE_DIR): os.makedirs(IMG_CACHE_DIR)
-        self.headers = {'User-Agent': 'Mozilla/5.0'}
+        if not os.path.exists(IMG_CACHE_DIR):
+            os.makedirs(IMG_CACHE_DIR)
+        self.headers = {
+            "User-Agent": self.DESKTOP_UA,
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.9",
+        }
+        self._negative_cache = set()
 
+    # ---------- public API ----------
     def get_fighter_image(self, name):
-        safe_name = name.replace(" ", "_").lower()
-        local_path = f"{IMG_CACHE_DIR}/{safe_name}.png"
-        if os.path.exists(local_path): return local_path
+        safe_name = self._safe_name(name)
+        local_path = os.path.join(IMG_CACHE_DIR, f"{safe_name}.png")
+        if os.path.exists(local_path):
+            return local_path
+        if name in self._negative_cache:
+            return None
 
-        print(f"   🕵️‍♂️ Hunting HD Image for: {name}...")
+        print(f"   🕵️‍♂️ Hunting image for: {name}")
+        for source_fn in (
+            self._try_ufc_com,
+            self._try_ufcstats,
+            self._try_wikipedia,
+            self._try_sherdog,
+        ):
+            try:
+                img_bytes = source_fn(name)
+                if img_bytes and self._save_image(img_bytes, local_path):
+                    print(f"      ✅ Found via {source_fn.__name__.replace('_try_', '')}")
+                    return local_path
+            except Exception as e:
+                print(f"      ⚠️ {source_fn.__name__}: {type(e).__name__}: {str(e)[:80]}")
+
+        print(f"      ❌ No image for {name}, using silhouette fallback")
+        self._negative_cache.add(name)
+        return None
+
+    # ---------- helpers ----------
+    @staticmethod
+    def _safe_name(name):
+        return name.replace(" ", "_").lower()
+
+    def _save_image(self, img_bytes, local_path):
         try:
-            url_name = name.lower().replace(" ", "-").replace("'", "")
-            url = f"https://www.ufc.com/athlete/{url_name}"
-            resp = requests.get(url, headers=self.headers, timeout=10)
-            if resp.status_code != 200: return None
+            img = Image.open(BytesIO(img_bytes))
+            # convert mode if needed
+            if img.mode not in ("RGB", "RGBA"):
+                img = img.convert("RGBA")
+            # require a sensible minimum size
+            if img.width < 150 or img.height < 150:
+                return False
+            img.save(local_path, "PNG")
+            return True
+        except Exception:
+            return False
 
-            soup = BeautifulSoup(resp.content, 'html.parser')
-            img_tag = soup.find('img', class_='hero-profile__image')
-            
-            if img_tag and 'src' in img_tag.attrs:
-                img_data = requests.get(img_tag['src'], headers=self.headers).content
-                img = Image.open(BytesIO(img_data))
-                img.save(local_path, "PNG")
-                print("      ✅ Image Captured!")
-                return local_path
-            else:
-                print("      ❌ No image found on profile.")
-                return None
-        except: return None
+    def _get(self, url, timeout=10):
+        return requests.get(url, headers=self.headers, timeout=timeout)
+
+    # ---------- sources ----------
+    def _try_ufc_com(self, name):
+        slugs_tried = set()
+        base_slug = name.lower().replace("'", "").replace(".", "")
+        candidates = [
+            base_slug.replace(" ", "-"),
+            base_slug.replace(" ", "-") + "-1",
+            base_slug.split(" ")[0] + "-" + base_slug.split(" ")[-1] if " " in base_slug else base_slug,
+        ]
+        for slug in candidates:
+            if slug in slugs_tried or not slug:
+                continue
+            slugs_tried.add(slug)
+            url = f"https://www.ufc.com/athlete/{slug}"
+            resp = self._get(url)
+            if resp.status_code != 200:
+                continue
+            soup = BeautifulSoup(resp.content, "html.parser")
+            img_tag = soup.find("img", class_="hero-profile__image")
+            if not img_tag:
+                img_tag = soup.select_one(".c-bio__image img, .image-style-full img")
+            if img_tag and img_tag.get("src"):
+                img_resp = self._get(img_tag["src"])
+                if img_resp.status_code == 200:
+                    return img_resp.content
+        return None
+
+    def _try_ufcstats(self, name):
+        # Search page
+        search_url = f"http://ufcstats.com/statistics/fighters/search?query={requests.utils.quote(name)}"
+        resp = self._get(search_url)
+        if resp.status_code != 200:
+            return None
+        soup = BeautifulSoup(resp.content, "html.parser")
+        link = soup.select_one("a.b-link.b-link_style_black")
+        if not link or not link.get("href"):
+            return None
+        profile_resp = self._get(link["href"])
+        if profile_resp.status_code != 200:
+            return None
+        pf = BeautifulSoup(profile_resp.content, "html.parser")
+        img_tag = pf.select_one("img.b-content__image, .b-fight-details__person-image img")
+        if img_tag and img_tag.get("src"):
+            img_resp = self._get(img_tag["src"])
+            if img_resp.status_code == 200:
+                return img_resp.content
+        return None
+
+    def _try_wikipedia(self, name):
+        # Search via MediaWiki API
+        api = "https://en.wikipedia.org/w/api.php"
+        params = {
+            "action": "query",
+            "format": "json",
+            "prop": "pageimages",
+            "piprop": "original",
+            "titles": name,
+            "redirects": 1,
+        }
+        resp = requests.get(api, headers=self.headers, params=params, timeout=10)
+        if resp.status_code != 200:
+            return None
+        data = resp.json().get("query", {}).get("pages", {})
+        for _pid, page in data.items():
+            original = page.get("original") or page.get("thumbnail")
+            if original and original.get("source"):
+                img_resp = self._get(original["source"])
+                if img_resp.status_code == 200:
+                    return img_resp.content
+        # fallback search if direct title miss
+        search_params = {
+            "action": "query",
+            "format": "json",
+            "list": "search",
+            "srsearch": f"{name} UFC fighter",
+            "srlimit": 1,
+        }
+        sr = requests.get(api, headers=self.headers, params=search_params, timeout=10)
+        if sr.status_code == 200:
+            hits = sr.json().get("query", {}).get("search", [])
+            if hits:
+                title = hits[0]["title"]
+                return self._try_wikipedia(title) if title != name else None
+        return None
+
+    def _try_sherdog(self, name):
+        search_url = f"https://www.sherdog.com/stats/fightfinder?SearchTxt={requests.utils.quote(name)}"
+        resp = self._get(search_url, timeout=12)
+        if resp.status_code != 200:
+            return None
+        soup = BeautifulSoup(resp.content, "html.parser")
+        link = soup.select_one("table.fightfinder_result a")
+        if not link or not link.get("href"):
+            return None
+        profile_url = link["href"]
+        if profile_url.startswith("/"):
+            profile_url = "https://www.sherdog.com" + profile_url
+        pr = self._get(profile_url, timeout=12)
+        if pr.status_code != 200:
+            return None
+        pf = BeautifulSoup(pr.content, "html.parser")
+        img = pf.select_one(".bio_fighter img, .fighter_image img, img.profile-image-mobile")
+        if img and img.get("src"):
+            src = img["src"]
+            if src.startswith("/"):
+                src = "https://www.sherdog.com" + src
+            ir = self._get(src, timeout=12)
+            if ir.status_code == 200:
+                return ir.content
+        return None
 
 # ==========================================
 # 1. RADAR CHART ENGINE
