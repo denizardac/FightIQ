@@ -66,6 +66,9 @@ class SocialDirector:
         except: return []
 
     def save_history(self, item_id):
+        if self.dry_run:
+            print(f"  [DRY-RUN] Would save to history: {item_id}")
+            return
         self.history.append(item_id)
         with open(FILES["history"], "w") as f: json.dump(self.history, f, indent=4)
 
