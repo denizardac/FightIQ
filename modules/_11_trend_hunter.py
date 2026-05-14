@@ -114,14 +114,23 @@ def get_trending_fighters():
     # 3. Match with DB
     all_fighters = load_fighter_names()
     counts = collections.Counter()
-    
-    # Pre-filter: only check fighters who have full names (2+ words) to avoid "Law" or "Just" matches
-    valid_names = [n for n in all_fighters if " " in n]
-    
+
+    # Two-stage match:
+    #   • Multi-word names → substring match (cheap and accurate)
+    #   • Single-word names → word-boundary regex to avoid false positives
+    multi_word = [n for n in all_fighters if " " in n]
+    single_word = [n for n in all_fighters if " " not in n and len(n) >= 4]
+    single_word_re = {n: re.compile(rf"\b{re.escape(n.lower())}\b") for n in single_word}
+
     for title in all_titles:
+        if not title:
+            continue
         t_clean = title.lower()
-        for name in valid_names:
+        for name in multi_word:
             if name.lower() in t_clean:
+                counts[name] += 1
+        for name, pat in single_word_re.items():
+            if pat.search(t_clean):
                 counts[name] += 1
     
     # Get Top 10

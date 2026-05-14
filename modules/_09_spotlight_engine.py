@@ -107,8 +107,21 @@ def get_gemini_model():
     return client
 
 def scrape_fighter_detailed(url):
+    if not url:
+        return None
+    resp = None
+    for attempt in range(3):
+        try:
+            resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=12)
+            if resp.status_code == 200:
+                break
+            resp = None
+        except Exception:
+            resp = None
+            time.sleep(1)
+    if not resp:
+        return None
     try:
-        resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=10)
         soup = BeautifulSoup(resp.text, 'html.parser')
         data = {"url": url}
         
@@ -182,22 +195,23 @@ def scrape_fighter_detailed(url):
                 elif weight_lbs <= 205: base_class = "Light Heavyweight"
                 else: base_class = "Heavyweight"
                 
-                # GENDER DETECTION: Check name for common women's fighter patterns
-                # Most reliable: check if they fight in women's divisions (lighter weights for women)
+                # GENDER DETECTION: ONLY mark as women's when explicit division
+                # text appears in the fight history (not anywhere on the page —
+                # site-wide navigation also contains "Women's" strings).
                 is_womens = False
-                
-                # Method 1: Weight threshold (women rarely fight above 145 lbs)
                 if weight_lbs <= 145:
-                    # Check fight history for "Women's" in event names or bio
-                    page_text = soup.get_text().lower()
-                    if "women's" in page_text or "wmma" in page_text:
-                        is_womens = True
-                
-                # Method 2: Explicit markers in the page
-                if "women's" in soup.get_text().lower():
-                    is_womens = True
-                
-                # Prefix with "Women's" if detected
+                    fight_table = soup.find('table', class_='b-fight-details__table')
+                    if fight_table:
+                        ftext = fight_table.get_text(separator=' ').lower()
+                        # Strict markers: division/weight class labels used by UFC
+                        womens_markers = [
+                            "women's strawweight", "women's flyweight",
+                            "women's bantamweight", "women's featherweight",
+                            "wmma"
+                        ]
+                        if any(m in ftext for m in womens_markers):
+                            is_womens = True
+
                 if is_womens:
                     data['weight_class'] = f"Women's {base_class}"
                 else:
@@ -931,12 +945,16 @@ def main():
     
     video_path = None
     if VideoEngine and ai_content.get('video_script'):
-        print(f"   � Rendering Video...")
-        video_path = VideoEngine.create_reel(
-            fighter_name,
-            card_abs_path,
-            ai_content['video_script']
-        )
+        try:
+            print("   🎬 Rendering Video...")
+            video_path = VideoEngine.create_reel(
+                fighter_name,
+                card_abs_path,
+                ai_content['video_script']
+            )
+        except Exception as e:
+            print(f"   ⚠️ Video rendering failed (continuing without video): {type(e).__name__}: {str(e)[:80]}")
+            video_path = None
     
     final_output = {
         "fighter": fighter_name,

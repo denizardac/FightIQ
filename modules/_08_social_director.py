@@ -180,6 +180,9 @@ class SocialDirector:
 
         try:
             tweet_id = self._loop.run_until_complete(_async_post())
+            if not tweet_id:
+                print("   ❌ Post returned no tweet id — treating as failure (no history insert).")
+                return None
             print(f"   ✅ Posted! ID: {tweet_id}")
             return str(tweet_id)
         except Exception as e:

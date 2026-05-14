@@ -96,33 +96,63 @@ def _extract_scout_data(deep_list, stats_list, f1, f2):
     d1, d2 = safe_ds(deep_list, 0), safe_ds(deep_list, 1)
     s1, s2 = safe_st(stats_list, 0), safe_st(stats_list, 1)
 
+    def _first(*vals, default='N/A'):
+        for v in vals:
+            if v not in (None, '', 'N/A', '--', 0):
+                return v
+        return default
+
+    def _compute_streaks(last_5):
+        """Read last_5_results (most recent first) and produce win/loss streak counts."""
+        if not isinstance(last_5, list) or not last_5:
+            return 0, 0
+        wins, losses = 0, 0
+        for r in last_5:
+            r_low = str(r).lower()
+            if 'win' in r_low and losses == 0:
+                wins += 1
+                if wins and losses == 0 and wins == len(last_5):
+                    continue
+            else:
+                break
+        for r in last_5:
+            r_low = str(r).lower()
+            if 'loss' in r_low and wins == 0:
+                losses += 1
+            else:
+                break
+        return wins, losses
+
     def scout(name, ds, st):
+        last_5 = ds.get('last_5_results', st.get('last_5', []))
+        win_streak, loss_streak = _compute_streaks(last_5)
         return {
             "name":            name,
             "record":          f"{ds.get('wins',0)}-{ds.get('losses',0)}-{ds.get('draws',0)}",
-            "age":             ds.get('age', st.get('age', 'N/A')),
-            "height":          ds.get('height', st.get('height', 'N/A')),
-            "reach":           ds.get('reach',  st.get('reach',  'N/A')),
-            "stance":          ds.get('stance', st.get('stance', 'N/A')),
-            "weight_class":    st.get('weight_class', ds.get('weight_class', 'N/A')),
-            # Striking
-            "SLpM":            st.get('SLpM',   ds.get('SLpM',   'N/A')),
-            "Str_Acc":         st.get('Str_Acc', ds.get('Str_Acc','N/A')),
-            "SApM":            st.get('SApM',   ds.get('SApM',   'N/A')),
-            "Str_Def":         st.get('Str_Def', ds.get('Str_Def','N/A')),
+            "age":             _first(ds.get('age'), st.get('age')),
+            "height":          _first(ds.get('height'), st.get('height')),
+            "reach":           _first(ds.get('reach'), st.get('reach')),
+            "stance":          _first(ds.get('stance'), st.get('stance')),
+            "weight_class":    _first(st.get('weight_class'), ds.get('weight_class')),
+            # Striking (only available in stat scout's `stats` dict)
+            "SLpM":            _first(st.get('SLpM')),
+            "Str_Acc":         _first(st.get('Str_Acc')),
+            "SApM":             _first(st.get('SApM')),
+            "Str_Def":         _first(st.get('Str_Def')),
             # Grappling
-            "TD_Avg":          st.get('TD_Avg',  ds.get('TD_Avg', 'N/A')),
-            "TD_Acc":          st.get('TD_Acc',  ds.get('TD_Acc', 'N/A')),
-            "TD_Def":          st.get('TD_Def',  ds.get('TD_Def', 'N/A')),
-            "Sub_Avg":         st.get('Sub_Avg', ds.get('Sub_Avg','N/A')),
-            # Finish rates
-            "KO_rate":         ds.get('KO_rate',  'N/A'),
-            "Sub_rate":        ds.get('Sub_rate', 'N/A'),
-            "finish_rate":     ds.get('finish_rate', 'N/A'),
+            "TD_Avg":          _first(st.get('TD_Avg')),
+            "TD_Acc":          _first(st.get('TD_Acc')),
+            "TD_Def":          _first(st.get('TD_Def')),
+            "Sub_Avg":         _first(st.get('Sub_Avg')),
+            # Finish rates (from deep_dive computed fields)
+            "KO_rate":         _first(ds.get('ko_rate')),
+            "Sub_rate":        _first(ds.get('sub_rate')),
+            "Dec_rate":        _first(ds.get('dec_rate')),
+            "first_round_finishes": ds.get('first_round_finishes', 0),
             # Momentum
-            "last_5_results":  ds.get('last_5_results', st.get('last_5', [])),
-            "win_streak":      ds.get('win_streak', 'N/A'),
-            "loss_streak":     ds.get('loss_streak', 'N/A'),
+            "last_5_results":  last_5,
+            "win_streak":      win_streak,
+            "loss_streak":     loss_streak,
         }
 
     return scout(f1, d1, s1), scout(f2, d2, s2)
@@ -146,14 +176,19 @@ def analyze_matchup(fight_data):
             recent = lm[-3:] if len(lm) >= 3 else lm
             line_movement_text = str(recent)
 
-    # News headlines
+    # News headlines (news_list is shaped [news_for_f1, news_for_f2])
     news_list = fight_data.get('news', [])
     news_text = "None"
-    if news_list:
-        n1 = [n['title'] for n in (news_list[0] if news_list else [])[:2]]
-        n2 = [n['title'] for n in (news_list[1] if len(news_list) > 1 else [])[:2]]
-        if n1 or n2:
-            news_text = f"{f1}: {n1} | {f2}: {n2}"
+    try:
+        if isinstance(news_list, list) and news_list:
+            n1_src = news_list[0] if len(news_list) > 0 and isinstance(news_list[0], list) else []
+            n2_src = news_list[1] if len(news_list) > 1 and isinstance(news_list[1], list) else []
+            n1 = [item.get('title', '') for item in n1_src[:2] if isinstance(item, dict)]
+            n2 = [item.get('title', '') for item in n2_src[:2] if isinstance(item, dict)]
+            if n1 or n2:
+                news_text = f"{f1}: {n1} | {f2}: {n2}"
+    except Exception as e:
+        print(f"   ⚠️ News parsing skipped: {type(e).__name__}: {str(e)[:60]}")
 
     scout1, scout2 = _extract_scout_data(deep, stats, f1, f2)
     print(f"🧠 Analyzing: {f1} vs {f2}...")

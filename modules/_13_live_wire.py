@@ -108,14 +108,17 @@ def get_live_results():
         event_url = event_link["href"]
         event_name = event_link.text.strip()
 
-        # Verify this is today's expected event
+        # Verify this is today's expected event (fuzzy: any shared word)
         try:
             with open(CARD_FILE, "r", encoding="utf-8") as f:
                 card_data = json.load(f)
                 expected_event = card_data.get("event", "")
-                if event_name.lower() not in expected_event.lower():
-                    print(f"   Event mismatch: '{event_name}' vs expected '{expected_event}'")
-                    return []
+                if expected_event:
+                    a = set(w.lower() for w in event_name.split() if len(w) > 3)
+                    b = set(w.lower() for w in expected_event.split() if len(w) > 3)
+                    if a and b and not (a & b):
+                        print(f"   Event mismatch: '{event_name}' vs expected '{expected_event}'")
+                        return []
         except Exception:
             pass  # No card file — proceed anyway
 
@@ -139,11 +142,28 @@ def get_live_results():
             f1_name = fighter_links[0].text.strip()
             f2_name = fighter_links[1].text.strip()
 
-            # First fighter listed is the winner on UFCStats
-            if "b-fight-details__table-text_win" in str(cols[1]):
+            # Determine winner by checking each link's parent paragraph for
+            # the win flag class. Falls back to first-listed-is-winner.
+            def _is_winner(link):
+                node = link
+                for _ in range(4):
+                    node = node.parent if node else None
+                    if not node:
+                        break
+                    cls = " ".join(node.get("class", [])) if hasattr(node, "get") else ""
+                    if "win" in cls:
+                        return True
+                return False
+
+            if _is_winner(fighter_links[0]):
+                winner, loser = f1_name, f2_name
+            elif _is_winner(fighter_links[1]):
+                winner, loser = f2_name, f1_name
+            elif "b-fight-details__table-text_win" in str(cols[1]):
                 winner, loser = f1_name, f2_name
             else:
-                winner, loser = f2_name, f1_name
+                # No definitive marker — skip this fight rather than guessing
+                continue
 
             method_col = cols[7] if len(cols) > 7 else None
             method = method_col.text.strip() if method_col else "Decision"

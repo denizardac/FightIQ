@@ -72,17 +72,36 @@ class BetistEngine:
         self.session.headers.update(self.headers)
 
     def resolve_current_domain(self):
-        """Scan Betist domains directly (cutt.ly redirect is dead)"""
+        """Scan Betist domains directly (cutt.ly redirect is dead).
+
+        Strategy: first try the cutt.ly mirror (returns a 30x with Location),
+        then probe a wide numeric range. We cache the latest working number
+        across runs so we don't waste 100 HEADs every cycle.
+        """
         logger.info("Scanning for active Betist domain...")
         import urllib3
         urllib3.disable_warnings()
-        # Try a range of known domains
-        for num in range(1630, 1660):
+
+        # 1) Try cutt.ly mirror — owners update it when they rotate
+        try:
+            r = self.session.head(BETIST_REDIRECT_URL, allow_redirects=True, timeout=8, verify=False)
+            final_host = (r.url or "").split("/")[2] if r.url and "://" in r.url else ""
+            if final_host and "betist" in final_host:
+                self.base_domain = final_host
+                self.base_url = f"https://{final_host}/getdata.php"
+                self.session.headers['Referer'] = f"https://{final_host}/"
+                logger.info(f"Active Betist domain via mirror: {final_host}")
+                return True
+        except Exception as e:
+            logger.debug(f"Mirror probe failed: {e}")
+
+        # 2) Brute scan a generous numeric window
+        for num in range(1500, 1800):
             domain = f"bet.betist{num}.com"
             try:
-                r = self.session.get(
+                r = self.session.head(
                     f"https://{domain}/",
-                    timeout=6, allow_redirects=True, verify=False
+                    timeout=4, allow_redirects=True, verify=False
                 )
                 if r.status_code == 200:
                     self.base_domain = domain
@@ -92,7 +111,8 @@ class BetistEngine:
                     return True
             except Exception:
                 continue
-        logger.error("No active Betist domain found in range 1630-1659")
+
+        logger.error("No active Betist domain found (1500-1799 scanned)")
         return False
 
     def find_ufc_league_id(self):

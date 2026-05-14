@@ -68,9 +68,22 @@ class SmartScraper:
     # --- 2. İSTATİSTİK & GÖRSEL ÇEKİCİ ---
     def scrape_stats(self, url):
         if not url: return {}
-        
+
+        resp = None
+        for attempt in range(3):
+            try:
+                resp = requests.get(url, headers=self._get_headers(), timeout=15)
+                if resp.status_code == 200:
+                    break
+                resp = None
+            except Exception as e:
+                print(f"      ⚠️ Stats fetch attempt {attempt+1}: {type(e).__name__}: {str(e)[:60]}")
+                resp = None
+                time.sleep(1)
+        if not resp:
+            return {}
+
         try:
-            resp = requests.get(url, headers=self._get_headers(), timeout=15)
             soup = BeautifulSoup(resp.text, 'html.parser')
             metrics = {}
             

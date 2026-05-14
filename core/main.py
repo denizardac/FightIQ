@@ -295,6 +295,15 @@ def main():
     # Do NOT spawn from here — would create duplicate processes
     # when both cron and daily pipeline run on fight night.
 
+    # Post-pipeline healthcheck: surface silent failures before sleeping
+    try:
+        logger.info("Running pipeline healthcheck")
+        from tools.healthcheck import main as healthcheck_main
+        severity = healthcheck_main()
+        PIPELINE_REPORT["healthcheck_severity"] = severity
+    except Exception as e:
+        logger.warning(f"Healthcheck failed (non-fatal): {e}")
+
     logger.info("="*60)
     logger.info("💤 SYSTEM SLEEPING. Next cycle scheduled via Cronjob.")
     logger.info("="*60)
