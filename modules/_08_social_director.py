@@ -1,8 +1,7 @@
 import json
 import os
 import time
-import base64
-import requests
+import asyncio
 from datetime import datetime
 from dotenv import load_dotenv
 import sys
@@ -24,9 +23,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, VISUALS_DIR
 
 load_dotenv()
-# twitterapi.io credentials (primary posting method)
-TWITTERAPI_IO_KEY = os.getenv("TWITTERAPI_IO_KEY")
-TWITTER_USERNAME = os.getenv("TWITTER_USERNAME", "FightIQBot")
+COOKIES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "twitter_cookies.json")
 
 FILES = {
     "card": get_data_path("1_card.json"),
@@ -41,18 +38,27 @@ class SocialDirector:
     def __init__(self, dry_run=False):
         self.history = self.load_history()
         self.dry_run = dry_run
-        self.twitterapi_key = TWITTERAPI_IO_KEY
-        self.twitter_username = TWITTER_USERNAME
+        self._loop = asyncio.new_event_loop()
+        self._twitter = None
 
         if dry_run:
             print("[DRY-RUN] Twitter connection skipped.")
             return
 
-        if not self.twitterapi_key:
-            print("❌ ERROR: TWITTERAPI_IO_KEY missing in .env")
+        if not os.path.exists(COOKIES_FILE):
+            print(f"❌ Twitter cookies not found: {COOKIES_FILE}")
+            print("   Run setup: python3 tools/setup_twitter_cookies.py")
             sys.exit(1)
 
-        print(f"✅ twitterapi.io ready → @{self.twitter_username}")
+        try:
+            from twikit import Client
+            client = Client("en-US")
+            client.load_cookies(COOKIES_FILE)
+            self._twitter = client
+            print("✅ Twitter (twikit) cookies loaded.")
+        except Exception as e:
+            print(f"❌ Twitter init failed: {e}")
+            sys.exit(1)
 
     def load_history(self):
         if not os.path.exists(FILES["history"]): return []
@@ -120,50 +126,32 @@ class SocialDirector:
         path = os.path.join(FILES["visuals"], target)
         return path if os.path.exists(path) else None
 
-    def _encode_media(self, media_path):
-        """Base64 encode a media file for twitterapi.io upload."""
-        if not media_path or not os.path.exists(str(media_path)):
-            return None, None
-        path_str = str(media_path).lower()
-        if path_str.endswith('.png'):
-            media_type = 'image/png'
-        elif path_str.endswith('.mp4'):
-            media_type = 'video/mp4'
-        else:
-            media_type = 'image/jpeg'
-        with open(media_path, 'rb') as f:
-            return base64.b64encode(f.read()).decode('utf-8'), media_type
+    def _post_via_twikit(self, text, media_path=None, reply_to_id=None):
+        """Post tweet via twikit (cookie-based). Returns tweet ID or None."""
+        async def _async_post():
+            media_ids = None
+            if media_path and os.path.exists(str(media_path)):
+                print(f"   🖼️ Uploading: {os.path.basename(str(media_path))}")
+                media = await self._twitter.upload_media(str(media_path))
+                media_ids = [media.media_id]
 
-    def _post_via_twitterapio(self, text, media_path=None, reply_to_id=None):
-        """Post tweet via twitterapi.io. Returns a placeholder ID or None."""
-        payload = {"user_name": self.twitter_username, "text": text}
+            reply_id = None
+            if reply_to_id and str(reply_to_id).isdigit():
+                reply_id = str(reply_to_id)
 
-        if media_path:
-            media_b64, media_type = self._encode_media(media_path)
-            if media_b64:
-                payload["media_data_base64"] = media_b64
-                payload["media_type"] = media_type
-                print(f"   🖼️ Media attached: {os.path.basename(str(media_path))}")
-
-        if reply_to_id and reply_to_id not in ("TWITTERAPIO_QUEUED", "DRY_RUN_FAKE_ID"):
-            payload["reply_to_tweet_id"] = str(reply_to_id)
+            tweet = await self._twitter.create_tweet(
+                text=text,
+                media_ids=media_ids,
+                reply_to=reply_id
+            )
+            return tweet.id
 
         try:
-            r = requests.post(
-                "https://api.twitterapi.io/twitter/send_tweet_v3",
-                headers={"X-API-Key": self.twitterapi_key},
-                json=payload,
-                timeout=30
-            )
-            data = r.json()
-            if data.get("status") == "success":
-                print(f"   ✅ Queued via twitterapi.io!")
-                return "TWITTERAPIO_QUEUED"
-            else:
-                print(f"   ❌ twitterapi.io error: {data.get('msg', data)}")
-                return None
+            tweet_id = self._loop.run_until_complete(_async_post())
+            print(f"   ✅ Posted! ID: {tweet_id}")
+            return str(tweet_id)
         except Exception as e:
-            print(f"   ❌ twitterapi.io request failed: {e}")
+            print(f"   ❌ twikit error: {e}")
             return None
 
     def post_tweet(self, text, media_path=None, reply_to_id=None, poll_options=None, poll_duration_minutes=None):
@@ -179,9 +167,9 @@ class SocialDirector:
 
         print(f"\n🐦 POSTING (Reply: {reply_to_id}):\n{text[:60]}...")
         if poll_options:
-            print("   ⚠️ Polls not supported by twitterapi.io — posting text only")
+            print("   ⚠️ Polls not supported in cookie mode — posting text only")
 
-        return self._post_via_twitterapio(text, media_path=media_path, reply_to_id=reply_to_id)
+        return self._post_via_twikit(text, media_path=media_path, reply_to_id=reply_to_id)
 
     # --- IDLE MODU (GÜNCELLENDİ: THREAD DESTEĞİ) ---
     def post_spotlight_file(self):
