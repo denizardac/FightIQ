@@ -1,14 +1,52 @@
-# Güvenlik (Asla yükleme!)
+# Security — never commit API keys
 .env
 
-# Python Gereksizleri
+# Python cache
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
 
-# Yerel Veriler (Sunucuda sıfırdan oluşsun)
-*.json
-!fighters_db.json  # Sadece veritabanı kalsın (opsiyonel, istersen bunu da gizle)
+# Virtual environment
+venv/
+.venv/
+env/
 
-# Loglar ve Görseller
+# Runtime data files (generated fresh on each run)
+data/*.json
+!data/fighters_db.json
+# Post history must persist on the server — DO NOT ignore
+!data/posted_history.json
+
+# Logs
+logs/
 *.log
+
+# Generated output (images, videos)
+output/
 visuals/
+
+# Assets cache (auto-downloaded)
+assets/images_cache/
+assets/backgrounds/
+assets/ticket_backgrounds/
+assets/background_cache.json
+
+# Temp audio
+data/voice_temp.mp3
+
+# Simulation output
+simulations/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

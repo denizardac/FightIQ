@@ -1,9 +1,28 @@
+# FightIQ — Python Dependencies
+# Install: pip install -r requirements.txt
+
+# Core HTTP + Scraping
 requests
 beautifulsoup4
 fake-useragent
-google-generativeai
+
+# Google AI (use google-genai, NOT the deprecated google-generativeai)
+google-genai>=1.0.0
+
+# Environment & Config
 python-dotenv
+
+# Twitter / X API
 tweepy
+
+# Visualization
 matplotlib
 numpy
 pillow
+
+# Video + Audio
+edge-tts
+moviepy
+
+# Resilience
+tenacity
