@@ -45,3 +45,16 @@ def get_output_path(filename, subdir="visuals"):
 
 # For legacy compatibility when imported
 DB_FILE = get_data_path("fighters_db.json")
+
+# Explicit re-export for modules that need absolute paths (fonts, .env, etc.)
+__all__ = [
+    "PROJECT_ROOT",
+    "DATA_DIR",
+    "MODULES_DIR",
+    "ASSETS_DIR",
+    "OUTPUT_DIR",
+    "VISUALS_DIR",
+    "get_data_path",
+    "get_output_path",
+    "DB_FILE",
+]
