@@ -30,8 +30,8 @@ logs/
 output/
 visuals/
 
-# Assets cache (auto-downloaded)
-assets/images_cache/
+# Assets cache (auto-downloaded — but commit fighter portraits for VPS deploy)
+# assets/images_cache/   <-- DO NOT ignore: fighter portraits are required on server
 assets/backgrounds/
 assets/ticket_backgrounds/
 assets/background_cache.json
