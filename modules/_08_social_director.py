@@ -1,7 +1,8 @@
 import json
 import os
 import time
-import tweepy
+import base64
+import requests
 from datetime import datetime
 from dotenv import load_dotenv
 import sys
@@ -23,10 +24,9 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, VISUALS_DIR
 
 load_dotenv()
-API_KEY = os.getenv("X_API_KEY")
-API_SECRET = os.getenv("X_API_SECRET")
-ACCESS_TOKEN = os.getenv("X_ACCESS_TOKEN")
-ACCESS_SECRET = os.getenv("X_ACCESS_SECRET")
+# twitterapi.io credentials (primary posting method)
+TWITTERAPI_IO_KEY = os.getenv("TWITTERAPI_IO_KEY")
+TWITTER_USERNAME = os.getenv("TWITTER_USERNAME", "FightIQBot")
 
 FILES = {
     "card": get_data_path("1_card.json"),
@@ -39,25 +39,20 @@ FILES = {
 
 class SocialDirector:
     def __init__(self, dry_run=False):
-        self.client = None
-        self.api_v1 = None
         self.history = self.load_history()
         self.dry_run = dry_run
-        
+        self.twitterapi_key = TWITTERAPI_IO_KEY
+        self.twitter_username = TWITTER_USERNAME
+
         if dry_run:
             print("[DRY-RUN] Twitter connection skipped.")
             return
 
-        if not all([API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET]):
-            print("❌ ERROR: Keys missing.")
+        if not self.twitterapi_key:
+            print("❌ ERROR: TWITTERAPI_IO_KEY missing in .env")
             sys.exit(1)
 
-        try:
-            self.client = tweepy.Client(consumer_key=API_KEY, consumer_secret=API_SECRET, access_token=ACCESS_TOKEN, access_token_secret=ACCESS_SECRET)
-            auth = tweepy.OAuth1UserHandler(API_KEY, API_SECRET, ACCESS_TOKEN, ACCESS_SECRET)
-            self.api_v1 = tweepy.API(auth)
-            print("✅ Twitter Connected.")
-        except: sys.exit(1)
+        print(f"✅ twitterapi.io ready → @{self.twitter_username}")
 
     def load_history(self):
         if not os.path.exists(FILES["history"]): return []
@@ -125,57 +120,51 @@ class SocialDirector:
         path = os.path.join(FILES["visuals"], target)
         return path if os.path.exists(path) else None
 
-    def _upload_media(self, media_path):
-        """Upload media via v1.1 API, return media_id or None."""
-        if not self.api_v1 or not media_path or not os.path.exists(media_path):
-            return None
+    def _encode_media(self, media_path):
+        """Base64 encode a media file for twitterapi.io upload."""
+        if not media_path or not os.path.exists(str(media_path)):
+            return None, None
+        path_str = str(media_path).lower()
+        if path_str.endswith('.png'):
+            media_type = 'image/png'
+        elif path_str.endswith('.mp4'):
+            media_type = 'video/mp4'
+        else:
+            media_type = 'image/jpeg'
+        with open(media_path, 'rb') as f:
+            return base64.b64encode(f.read()).decode('utf-8'), media_type
+
+    def _post_via_twitterapio(self, text, media_path=None, reply_to_id=None):
+        """Post tweet via twitterapi.io. Returns a placeholder ID or None."""
+        payload = {"user_name": self.twitter_username, "text": text}
+
+        if media_path:
+            media_b64, media_type = self._encode_media(media_path)
+            if media_b64:
+                payload["media_data_base64"] = media_b64
+                payload["media_type"] = media_type
+                print(f"   🖼️ Media attached: {os.path.basename(str(media_path))}")
+
+        if reply_to_id and reply_to_id not in ("TWITTERAPIO_QUEUED", "DRY_RUN_FAKE_ID"):
+            payload["reply_to_tweet_id"] = str(reply_to_id)
+
         try:
-            if media_path.lower().endswith(".mp4"):
-                print(f"   🎥 Uploading Video: {media_path}")
-                media = self.api_v1.media_upload(filename=media_path, media_category='TWEET_VIDEO', chunked=True)
+            r = requests.post(
+                "https://api.twitterapi.io/twitter/send_tweet_v3",
+                headers={"X-API-Key": self.twitterapi_key},
+                json=payload,
+                timeout=30
+            )
+            data = r.json()
+            if data.get("status") == "success":
+                print(f"   ✅ Queued via twitterapi.io!")
+                return "TWITTERAPIO_QUEUED"
             else:
-                media = self.api_v1.media_upload(filename=media_path)
-            return media.media_id
+                print(f"   ❌ twitterapi.io error: {data.get('msg', data)}")
+                return None
         except Exception as e:
-            print(f"   ⚠️ Media upload failed: {e}")
+            print(f"   ❌ twitterapi.io request failed: {e}")
             return None
-
-    def _post_v2(self, text, media_id=None, reply_to_id=None, poll_options=None, poll_duration_minutes=None):
-        """Try Twitter API v2 (create_tweet). Returns tweet id or raises."""
-        poll_args = {}
-        if poll_options:
-            poll_args['poll_options'] = poll_options
-            poll_args['poll_duration_minutes'] = poll_duration_minutes or 24 * 60
-
-        if poll_options and media_id:
-            print("   ⚠️ Poll + Media — posting as thread")
-            resp = self.client.create_tweet(text=text, in_reply_to_tweet_id=reply_to_id, **poll_args)
-            first_id = resp.data['id']
-            print(f"   🚀 Poll tweet sent! ID: {first_id}")
-            resp2 = self.client.create_tweet(text="🎥", media_ids=[media_id], in_reply_to_tweet_id=first_id)
-            print(f"   🎥 Video reply sent! ID: {resp2.data['id']}")
-            return first_id
-
-        resp = self.client.create_tweet(
-            text=text,
-            media_ids=[media_id] if media_id else None,
-            in_reply_to_tweet_id=reply_to_id,
-            **poll_args
-        )
-        print(f"   🚀 Sent (v2)! ID: {resp.data['id']}")
-        return resp.data['id']
-
-    def _post_v1(self, text, media_id=None, reply_to_id=None):
-        """Fallback to Twitter API v1.1 (update_status). Polls not supported."""
-        kwargs = {}
-        if media_id:
-            kwargs['media_ids'] = [media_id]
-        if reply_to_id:
-            kwargs['in_reply_to_status_id'] = reply_to_id
-            kwargs['auto_populate_reply_metadata'] = True
-        status = self.api_v1.update_status(status=text, **kwargs)
-        print(f"   🚀 Sent (v1.1 fallback)! ID: {status.id}")
-        return str(status.id)
 
     def post_tweet(self, text, media_path=None, reply_to_id=None, poll_options=None, poll_duration_minutes=None):
         if self.dry_run:
@@ -189,32 +178,10 @@ class SocialDirector:
             return "DRY_RUN_FAKE_ID"
 
         print(f"\n🐦 POSTING (Reply: {reply_to_id}):\n{text[:60]}...")
-        media_id = self._upload_media(media_path) if media_path else None
-
-        # Try v2 first; on 403 (Project restriction) fall back to v1.1
-        if self.client:
-            try:
-                return self._post_v2(text, media_id=media_id, reply_to_id=reply_to_id,
-                                     poll_options=poll_options, poll_duration_minutes=poll_duration_minutes)
-            except Exception as e:
-                err = str(e)
-                if "403" in err and "Project" in err:
-                    print(f"   ⚠️ v2 blocked (app not in Project). Falling back to v1.1…")
-                elif "403" in err:
-                    print(f"   ⚠️ v2 403: {err[:120]}. Falling back to v1.1…")
-                else:
-                    print(f"   ❌ v2 error: {err[:120]}")
-                    return None
-
-        # v1.1 fallback (polls not supported — post text+media only)
         if poll_options:
-            print("   ⚠️ Polls not supported in v1.1 fallback — posting text only")
-        if self.api_v1:
-            try:
-                return self._post_v1(text, media_id=media_id, reply_to_id=reply_to_id)
-            except Exception as e:
-                print(f"   ❌ v1.1 error: {e}")
-        return None
+            print("   ⚠️ Polls not supported by twitterapi.io — posting text only")
+
+        return self._post_via_twitterapio(text, media_path=media_path, reply_to_id=reply_to_id)
 
     # --- IDLE MODU (GÜNCELLENDİ: THREAD DESTEĞİ) ---
     def post_spotlight_file(self):
