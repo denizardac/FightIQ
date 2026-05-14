@@ -145,19 +145,23 @@ class SocialDirector:
             if reply_to_id and str(reply_to_id).isdigit():
                 reply_to_param = str(reply_to_id)
 
+            media_entities = [
+                {'media_id': mid, 'tagged_users': []}
+                for mid in media_ids
+            ]
+
             response, _ = await self._twitter.gql.create_tweet(
-                tweet_text=text,
-                is_note_tweet=False,
-                media_ids=media_ids,
-                poll_uri='',
-                community_id=None,
-                share_with_followers=False,
-                reply_to=reply_to_param,
-                attachment_url=None,
-                conversation_control=None,
-                richtext_options=None,
-                edit_tweet_id=None,
-                exclusive_tweet=False
+                False,            # is_note_tweet
+                text,             # text
+                media_entities,   # media_entities
+                None,             # poll_uri
+                reply_to_param,   # reply_to
+                None,             # attachment_url
+                None,             # community_id
+                False,            # share_with_followers
+                None,             # richtext_options
+                None,             # edit_tweet_id
+                None              # limit_mode
             )
 
             if isinstance(response, dict) and 'errors' in response and response.get('errors'):
