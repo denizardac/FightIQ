@@ -164,13 +164,14 @@ class SocialDirector:
                 None              # limit_mode
             )
 
-            if isinstance(response, dict) and 'errors' in response and response.get('errors'):
+            if isinstance(response, dict) and response.get('errors'):
                 raise Exception(f"Twitter API errors: {response['errors']}")
 
             try:
                 return response['data']['create_tweet']['tweet_results']['result']['rest_id']
             except (KeyError, TypeError):
-                return 'POSTED_OK'
+                print(f"   ⚠️ Unexpected response shape: {json.dumps(response)[:500]}")
+                return None
 
         try:
             tweet_id = self._loop.run_until_complete(_async_post())
@@ -339,7 +340,7 @@ class SocialDirector:
                 self.save_history(uid)
                 count += 1
                 if not self.dry_run:
-                    time.sleep(60)
+                    time.sleep(180)
 
     def _kickoff_tweet(self, event_name):
         """Monday: hype tweet with the main event Versus card attached."""
