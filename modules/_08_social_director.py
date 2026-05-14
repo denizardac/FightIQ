@@ -127,24 +127,46 @@ class SocialDirector:
         return path if os.path.exists(path) else None
 
     def _post_via_twikit(self, text, media_path=None, reply_to_id=None):
-        """Post tweet via twikit (cookie-based). Returns tweet ID or None."""
+        """Post tweet via twikit using low-level GraphQL call to avoid parse bugs."""
         async def _async_post():
-            media_ids = None
+            media_ids = []
             if media_path and os.path.exists(str(media_path)):
                 print(f"   🖼️ Uploading: {os.path.basename(str(media_path))}")
-                media = await self._twitter.upload_media(str(media_path))
-                media_ids = [media.media_id]
+                try:
+                    media = await self._twitter.upload_media(str(media_path))
+                    if hasattr(media, 'media_id'):
+                        media_ids = [media.media_id]
+                    elif isinstance(media, str):
+                        media_ids = [media]
+                except Exception as e:
+                    print(f"   ⚠️ Media upload failed: {e}")
 
-            reply_id = None
+            reply_to_param = None
             if reply_to_id and str(reply_to_id).isdigit():
-                reply_id = str(reply_to_id)
+                reply_to_param = str(reply_to_id)
 
-            tweet = await self._twitter.create_tweet(
-                text=text,
+            response, _ = await self._twitter.gql.create_tweet(
+                tweet_text=text,
+                is_note_tweet=False,
                 media_ids=media_ids,
-                reply_to=reply_id
+                poll_uri='',
+                community_id=None,
+                share_with_followers=False,
+                reply_to=reply_to_param,
+                attachment_url=None,
+                conversation_control=None,
+                richtext_options=None,
+                edit_tweet_id=None,
+                exclusive_tweet=False
             )
-            return tweet.id
+
+            if isinstance(response, dict) and 'errors' in response and response.get('errors'):
+                raise Exception(f"Twitter API errors: {response['errors']}")
+
+            try:
+                return response['data']['create_tweet']['tweet_results']['result']['rest_id']
+            except (KeyError, TypeError):
+                return 'POSTED_OK'
 
         try:
             tweet_id = self._loop.run_until_complete(_async_post())
