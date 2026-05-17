@@ -15,6 +15,10 @@ import os
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR
 
 
