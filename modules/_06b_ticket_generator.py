@@ -269,7 +269,8 @@ def calculate_parlay_odds(slip_data):
     """Product of valid decimal odds only (no fabricated defaults)."""
     total = 1.0
     n = 0
-    for pick in slip_data[:5]:
+    max_legs = getattr(config, "PARLAY_MAX_LEGS", 3) if config else 3
+    for pick in slip_data[:max_legs]:
         o = extract_odds(pick)
         if o is not None and o > 1.0:
             total *= o
@@ -321,7 +322,7 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
     slip_titles = {
         "safe": ("SAFE SLIP", "SUREFIRE PARLAY"),
         "violence": ("VIOLENCE SLIP", "FINISH GUARANTEED"),
-        "value": ("VALUE SLIP", "SHARP MONEY")
+        "value": ("EDGE SLIP", "MODEL PARLAY")
     }
     title, subtitle = slip_titles.get(slip_type, slip_titles["safe"])
     
@@ -342,7 +343,8 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
     # ===========================================
     # PICKS SECTION (TALE OF THE TAPE: DUAL DUEL)
     # ===========================================
-    for i, pick in enumerate(slip_data[:5], 1):
+    max_legs = getattr(config, "PARLAY_MAX_LEGS", 3) if config else 3
+    for i, pick in enumerate(slip_data[:max_legs], 1):
         match = pick.get('match', 'Unknown')
         pick_text = pick.get('pick', 'Unknown')
         odds = extract_odds(pick)
@@ -457,7 +459,7 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
     draw.line([(120, y), (WIDTH-120, y)], fill=accent, width=3)
     y += 40 # Standard gap
     
-    num_picks = len(slip_data[:5])
+    num_picks = len(slip_data[:max_legs])
     draw.text((WIDTH//2 + 2, y + 2), f"--- {num_picks}-LEG PARLAY ---", font=font_subtitle, fill="#000000", anchor="mt")
     draw.text((WIDTH//2, y), f"--- {num_picks}-LEG PARLAY ---", font=font_subtitle, fill="#FFFFFF", anchor="mt")
     y += 55 # Adjusted gap
@@ -488,7 +490,7 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
     if slip_type == "violence":
         draw.text((WIDTH//2, banner_y + 17), "RISK: EXTREME", font=font_small, fill="#FF4444", anchor="mm")
     elif slip_type == "value":
-        draw.text((WIDTH//2, banner_y + 17), "AI EDGE: MASSIVE", font=font_small, fill="#FFD700", anchor="mm")
+        draw.text((WIDTH//2, banner_y + 17), "MODEL EDGE", font=font_small, fill="#FFD700", anchor="mm")
     else:
         draw.text((WIDTH//2, banner_y + 17), "CONFIDENCE: MAX", font=font_small, fill="#00FF41", anchor="mm")
     
@@ -525,7 +527,8 @@ def create_hybrid_ticket(slip_data, slip_type):
     total_odds = calculate_parlay_odds(slip_data)
     win_amount = int(100 * total_odds)
     
-    print(f"   📊 {len(slip_data[:5])} picks @ {total_odds} = ${win_amount}")
+    max_legs = getattr(config, "PARLAY_MAX_LEGS", 3) if config else 3
+    print(f"   📊 {len(slip_data[:max_legs])} picks @ {total_odds} = ${win_amount}")
     
     # Step 1: Get background (AI-generated or cached)
     background = get_or_generate_background(slip_type)

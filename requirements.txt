@@ -30,3 +30,7 @@ moviepy
 
 # Resilience
 tenacity
+
+# OddsPortal decrypt + optional TLS impersonation
+cryptography
+curl_cffi

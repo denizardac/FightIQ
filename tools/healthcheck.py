@@ -90,10 +90,58 @@ def check_card_coverage():
     return issues
 
 
+def check_live_wire_readiness():
+    """Preflight for fight-night Live Wire (scraping + Twitter cookies)."""
+    from datetime import datetime, timedelta
+
+    card = _load("1_card.json") or {}
+    cookies_path = get_data_path("twitter_cookies.json")
+    report = {
+        "fight_night_today": False,
+        "event_url": card.get("url"),
+        "twitter_cookies": os.path.exists(cookies_path),
+        "scrape_ok": False,
+        "finished_fights": 0,
+        "gemini_key": bool(os.environ.get("GEMINI_API_KEY")),
+    }
+
+    date_str = card.get("date", "")
+    if date_str:
+        try:
+            event_day = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+            today = datetime.now().date()
+            report["fight_night_today"] = today in (event_day, event_day + timedelta(days=1))
+        except ValueError:
+            pass
+
+    if report["event_url"]:
+        try:
+            from modules import _13_live_wire as lw
+            results = lw.get_live_results()
+            report["scrape_ok"] = True
+            report["finished_fights"] = len(results)
+        except Exception as e:
+            report["scrape_error"] = str(e)[:120]
+
+    return report
+
+
 def main():
     print("\n" + "=" * 60)
     print("🩺 FightIQ Pipeline Healthcheck")
     print("=" * 60)
+
+    lw = check_live_wire_readiness()
+    if lw.get("fight_night_today"):
+        print("   🔥 Fight night detected")
+    print(f"   {'✅' if lw.get('twitter_cookies') else '❌'} Twitter cookies")
+    print(f"   {'✅' if lw.get('event_url') else '❌'} Event URL in 1_card.json")
+    if lw.get("scrape_ok"):
+        print(f"   ✅ Live Wire scrape: {lw.get('finished_fights', 0)} finished bout(s) on page")
+    elif lw.get("scrape_error"):
+        print(f"   ❌ Live Wire scrape failed: {lw['scrape_error']}")
+    if not lw.get("gemini_key"):
+        print("   ⚠️  GEMINI_API_KEY not set in environment")
 
     issues = check_card_coverage()
     if issues.get("skipped"):

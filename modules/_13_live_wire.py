@@ -1,53 +1,58 @@
-import requests
-from bs4 import BeautifulSoup
+import argparse
 import json
 import os
 import sys
-from datetime import datetime
 import time
-from google import genai
+from datetime import datetime, timedelta
+
+import requests
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
-
+from google import genai
 
 # ==========================================
-# 🔥 FIGHTIQ: LIVE WIRE (Real-Time Commentary)
+# FIGHTIQ: LIVE WIRE (Real-Time Commentary)
 # ==========================================
 
-# Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core.paths import get_data_path
+from core.paths import get_data_path, PROJECT_ROOT
 
-# P0 FIX: Standard import at module level
 try:
     from modules import _08_social_director as SocialDirector
 except ImportError:
     SocialDirector = None
 
-
-try:
-    sys.stdout.reconfigure(encoding='utf-8')
-except:
-    pass
-
-# Load environment
-load_dotenv()
-
-# Files
-CARD_FILE = get_data_path("1_card.json")
-RESULTS_FILE = get_data_path("3_results.json")
-LIVE_WIRE_HISTORY = get_data_path("live_wire_history.json")
-
-# Configuration
 try:
     import core.config as config
     POLL_INTERVAL = config.LIVE_WIRE_POLL_INTERVAL
+    MAX_RUNTIME_HOURS = config.LIVE_WIRE_MAX_RUNTIME_HOURS
     GEMINI_MODELS = config.GEMINI_MODELS
 except ImportError:
-    print("⚠️ config.py not found using defaults")
     POLL_INTERVAL = 60
-    GEMINI_MODELS = ["models/gemini-exp-1206", "models/gemini-2.0-flash-exp"]
+    MAX_RUNTIME_HOURS = 8
+    GEMINI_MODELS = ["models/gemini-2.5-flash"]
 
-# Setup Gemini
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
+
+CARD_FILE = get_data_path("1_card.json")
+RESULTS_FILE = get_data_path("3_results.json")
+LIVE_WIRE_HISTORY = get_data_path("live_wire_history.json")
+COOKIES_FILE = get_data_path("twitter_cookies.json")
+
+UFC_STATS_COMPLETED = "http://ufcstats.com/statistics/events/completed"
+REQUEST_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0 Safari/537.36"
+    )
+}
+
+
 api_key = os.getenv("GEMINI_API_KEY")
 client = None
 if api_key:
@@ -56,11 +61,35 @@ if api_key:
     except Exception as e:
         print(f"⚠️ GenAI Client Init Error: {e}")
 
-UFC_STATS_URL = "http://ufcstats.com/statistics/events/completed"
+
+def load_card():
+    if not os.path.exists(CARD_FILE):
+        return {}
+    try:
+        with open(CARD_FILE, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+
+def is_fight_night(card=None):
+    """True when today's date matches the card event date (fight night)."""
+    card = card or load_card()
+    if not card:
+        return False
+    date_str = card.get("date", "")
+    if not date_str:
+        return False
+    try:
+        event_day = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return False
+    today = datetime.now().date()
+    # Also allow day-after for cards that run past midnight UTC
+    return today in (event_day, event_day + timedelta(days=1))
 
 
 def load_history():
-    """Load history of posted reactions."""
     if os.path.exists(LIVE_WIRE_HISTORY):
         try:
             with open(LIVE_WIRE_HISTORY, "r", encoding="utf-8") as f:
@@ -71,7 +100,6 @@ def load_history():
 
 
 def save_history(history):
-    """Persist history of posted reactions."""
     try:
         with open(LIVE_WIRE_HISTORY, "w", encoding="utf-8") as f:
             json.dump(history, f, indent=2, ensure_ascii=False)
@@ -79,102 +107,100 @@ def save_history(history):
         print(f"   ⚠️ Could not save live wire history: {e}")
 
 
+def _event_url_from_card(card):
+    url = (card or {}).get("url", "").strip()
+    if url and "event-details" in url:
+        return url
+    return None
+
+
+def _event_url_from_completed(expected_event=""):
+    """Fallback: newest completed UFCStats event."""
+    try:
+        response = requests.get(UFC_STATS_COMPLETED, headers=REQUEST_HEADERS, timeout=15)
+        soup = BeautifulSoup(response.text, "html.parser")
+        for row in soup.find_all("tr", class_="b-statistics__table-row"):
+            link = row.find("a", class_="b-link") or row.find("a")
+            if not link or not link.get("href"):
+                continue
+            name = link.text.strip()
+            if expected_event:
+                a = {w.lower() for w in name.split() if len(w) > 3}
+                b = {w.lower() for w in expected_event.split() if len(w) > 3}
+                if a and b and not (a & b):
+                    continue
+            return link["href"], name
+    except Exception as e:
+        print(f"   ⚠️ Completed events fetch failed: {e}")
+    return None, None
+
+
+def _parse_fight_row(row):
+    """
+    Parse one UFCStats event-details row.
+    Current layout (2026): col0 = win flag, col1 = two fighters (winner listed first).
+    """
+    cols = row.find_all("td")
+    if len(cols) < 8:
+        return None
+
+    flag_col = cols[0]
+    flag_text = flag_col.get_text(" ", strip=True).lower()
+    has_win = bool(flag_col.find("b-flag_style_green")) or flag_text == "win"
+    if not has_win:
+        return None  # Fight not finished yet
+
+    fighter_links = cols[1].find_all("a", class_="b-link")
+    if len(fighter_links) < 2:
+        return None
+
+    winner = fighter_links[0].text.strip()
+    loser = fighter_links[1].text.strip()
+
+    method_parts = []
+    for p in cols[7].find_all("p", class_="b-fight-details__table-text"):
+        t = p.get_text(strip=True)
+        if t:
+            method_parts.append(t)
+    method = " ".join(method_parts) if method_parts else "Decision"
+
+    return {"winner": winner, "loser": loser, "method": method}
+
+
 def get_live_results():
     """
-    Poll UFCStats completed events page for fight results from today's event.
-    Returns a list of dicts: [{winner, loser, method}, ...]
+    Poll the event page from 1_card.json for newly completed fights.
+    Uses per-fight win flags — NOT the completed-events index alone.
     """
-    try:
-        response = requests.get(UFC_STATS_URL, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
+    card = load_card()
+    event_url = _event_url_from_card(card)
+    event_name = card.get("event", "")
 
-        event_rows = soup.find_all("tr", class_="b-statistics__table-row")
-        if not event_rows:
-            return []
-
-        # Most recent completed event is the first row with a link
-        first_event = None
-        for row in event_rows:
-            if row.find("a"):
-                first_event = row
-                break
-        if not first_event:
-            return []
-
-        event_link = first_event.find("a", class_="b-link") or first_event.find("a")
-        if not event_link:
-            return []
-
-        event_url = event_link["href"]
-        event_name = event_link.text.strip()
-
-        # Verify this is today's expected event (fuzzy: any shared word)
-        try:
-            with open(CARD_FILE, "r", encoding="utf-8") as f:
-                card_data = json.load(f)
-                expected_event = card_data.get("event", "")
-                if expected_event:
-                    a = set(w.lower() for w in event_name.split() if len(w) > 3)
-                    b = set(w.lower() for w in expected_event.split() if len(w) > 3)
-                    if a and b and not (a & b):
-                        print(f"   Event mismatch: '{event_name}' vs expected '{expected_event}'")
-                        return []
-        except Exception:
-            pass  # No card file — proceed anyway
-
-        # Fetch fight results from event detail page
-        response = requests.get(event_url, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        results = []
-        fight_rows = soup.find_all("tr", class_="b-fight-details__table-row")
-
-        for row in fight_rows[1:]:  # Skip header
-            cols = row.find_all("td")
-            if len(cols) < 2:
-                continue
-
-            fighters_col = cols[1]
-            fighter_links = fighters_col.find_all("a")
-            if len(fighter_links) < 2:
-                continue
-
-            f1_name = fighter_links[0].text.strip()
-            f2_name = fighter_links[1].text.strip()
-
-            # Determine winner by checking each link's parent paragraph for
-            # the win flag class. Falls back to first-listed-is-winner.
-            def _is_winner(link):
-                node = link
-                for _ in range(4):
-                    node = node.parent if node else None
-                    if not node:
-                        break
-                    cls = " ".join(node.get("class", [])) if hasattr(node, "get") else ""
-                    if "win" in cls:
-                        return True
-                return False
-
-            if _is_winner(fighter_links[0]):
-                winner, loser = f1_name, f2_name
-            elif _is_winner(fighter_links[1]):
-                winner, loser = f2_name, f1_name
-            elif "b-fight-details__table-text_win" in str(cols[1]):
-                winner, loser = f1_name, f2_name
-            else:
-                # No definitive marker — skip this fight rather than guessing
-                continue
-
-            method_col = cols[7] if len(cols) > 7 else None
-            method = method_col.text.strip() if method_col else "Decision"
-
-            results.append({"winner": winner, "loser": loser, "method": method})
-
-        return results
-
-    except Exception as e:
-        print(f"   ❌ Error fetching live results: {e}")
+    if not event_url:
+        event_url, event_name = _event_url_from_completed(event_name)
+    if not event_url:
+        print("   ⚠️ No event URL (card missing url and completed fallback failed)")
         return []
+
+    try:
+        response = requests.get(event_url, headers=REQUEST_HEADERS, timeout=15)
+        if response.status_code != 200:
+            print(f"   ⚠️ Event page HTTP {response.status_code}")
+            return []
+        soup = BeautifulSoup(response.text, "html.parser")
+    except Exception as e:
+        print(f"   ❌ Error fetching event page: {e}")
+        return []
+
+    results = []
+    for row in soup.find_all("tr", class_="b-fight-details__table-row"):
+        parsed = _parse_fight_row(row)
+        if parsed:
+            results.append(parsed)
+
+    if results:
+        print(f"   📋 Event: {event_name or event_url} — {len(results)} finished bout(s)")
+    return results
 
 
 def generate_reaction(winner, loser, method, our_prediction=None):
@@ -187,21 +213,25 @@ def generate_reaction(winner, loser, method, our_prediction=None):
 RESULT: {winner} defeats {loser} via {method}
 
 """
-        # Add prediction context
         if our_prediction:
-            predicted_winner = our_prediction.get('winner', '')
-            predicted_method = our_prediction.get('method', '')
-            confidence = our_prediction.get('confidence', 5)
-            
-            if predicted_winner.lower() == winner.lower():
-                prompt += f"OUR PREDICTION: ✅ We called {predicted_winner} via {predicted_method} (Confidence: {confidence}/10)\n"
-                prompt += "TONE: Celebrate being right! Hype it up!\n"
+            predicted_winner = our_prediction.get("winner", "")
+            predicted_method = our_prediction.get("method", "")
+            confidence = our_prediction.get("confidence", 5)
+
+            if predicted_winner.lower() in winner.lower() or winner.lower() in predicted_winner.lower():
+                prompt += (
+                    f"OUR PREDICTION: ✅ We called {predicted_winner} via {predicted_method} "
+                    f"(Confidence: {confidence}/10)\n"
+                    "TONE: Celebrate being right! Hype it up!\n"
+                )
             else:
-                prompt += f"OUR PREDICTION: ❌ We predicted {predicted_winner} (they lost)\n"
-                prompt += "TONE: Shocked but respectful. Acknowledge the upset.\n"
+                prompt += (
+                    f"OUR PREDICTION: ❌ We predicted {predicted_winner} (they lost)\n"
+                    "TONE: Shocked but respectful. Acknowledge the upset.\n"
+                )
         else:
             prompt += "TONE: Pure hype, unbiased reaction.\n"
-        
+
         prompt += """
 Requirements:
 - Maximum 250 characters (short and punchy)
@@ -211,166 +241,165 @@ Requirements:
 - Sound like a real MMA fan, not a robot
 
 Return ONLY the tweet text, nothing else."""
-        
-        # Generate — use first available model from config
-        resp = client.models.generate_content(
-            model=GEMINI_MODELS[0],
-            contents=prompt
-        )
+
+        resp = client.models.generate_content(model=GEMINI_MODELS[0], contents=prompt)
         reaction = resp.text.strip()
-        
-        # Safety check length
         if len(reaction) > 280:
             reaction = reaction[:277] + "..."
-        
         return reaction
-    
+
     except Exception as e:
         print(f"   ❌ AI reaction generation failed: {e}")
         return f"🚨 {winner} defeats {loser} via {method}! #UFC"
 
+
 def post_live_reaction(reaction_text):
-    """
-    Post reaction to Twitter.
-    Uses SocialDirector if available.
-    """
+    if not SocialDirector:
+        print("⚠️ Social Director not available - cannot post")
+        return None
+    if not os.path.exists(COOKIES_FILE):
+        print(f"⚠️ Twitter cookies missing: {COOKIES_FILE}")
+        return None
+
     try:
-        # P0 FIX: Use module-level import instead of dynamic
-        if not SocialDirector:
-            print("⚠️ Social Director not available - cannot post")
-            return False
-        
-        # Create instance and post
         director = SocialDirector.SocialDirector()
         tweet_id = director.post_tweet(reaction_text)
-        
         if tweet_id:
             print(f"   ✅ Posted to Twitter: {tweet_id}")
-            return tweet_id
         else:
-            print(f"   ⚠️ Twitter post failed")
-            return None
-    
+            print("   ⚠️ Twitter post failed")
+        return tweet_id
     except Exception as e:
         print(f"   ❌ Could not post to Twitter: {e}")
         return None
 
-def run_live_wire_once():
-    """
-    Single poll cycle: Check for new results and post reactions.
-    """
-    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 🔍 Polling for fight results...")
-    
-    # Load history
-    history = load_history()
-    
-    # Get our predictions
+
+def _load_predictions():
     predictions = {}
-    if os.path.exists(RESULTS_FILE):
-        try:
-            with open(RESULTS_FILE, "r", encoding="utf-8") as f:
-                results_data = json.load(f)
-                for item in results_data:
-                    matchup = item.get('matchup', '')
-                    brain = item.get('fight_brain_output', {})
-                    prediction = brain.get('prediction', {})
-                    predictions[matchup] = prediction
-        except:
-            pass
-    
-    # Get live results
-    live_results = get_live_results()
-    
-    if not live_results:
-        print("   No new results detected.")
-        return
-    
-    print(f"   Found {len(live_results)} completed fights.")
-    
-    # Process each result
-    for result in live_results:
-        winner = result['winner']
-        loser = result['loser']
-        method = result['method']
-        
-        # Create unique ID
-        fight_id = f"{winner}_vs_{loser}"
-        
-        # Check if already posted
-        if fight_id in history:
-            print(f"   ⏭️  Already posted reaction for {winner} vs {loser}")
+    if not os.path.exists(RESULTS_FILE):
+        return predictions
+    try:
+        with open(RESULTS_FILE, "r", encoding="utf-8") as f:
+            for item in json.load(f):
+                matchup = item.get("matchup", "")
+                brain = item.get("fight_brain_output", {})
+                if matchup and brain.get("prediction"):
+                    predictions[matchup] = brain["prediction"]
+    except Exception:
+        pass
+    return predictions
+
+
+def _find_prediction(predictions, winner, loser):
+    for key in (f"{winner} vs {loser}", f"{loser} vs {winner}"):
+        if key in predictions:
+            return predictions[key]
+    w_low, l_low = winner.lower(), loser.lower()
+    for matchup, pred in predictions.items():
+        if " vs " not in matchup:
             continue
-        
+        if w_low in matchup.lower() and l_low in matchup.lower():
+            return pred
+    return None
+
+
+def run_live_wire_once():
+    print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 🔍 Polling for fight results...")
+
+    history = load_history()
+    predictions = _load_predictions()
+    live_results = get_live_results()
+
+    if not live_results:
+        print("   No finished fights on event page yet.")
+        return 0
+
+    posted = 0
+    for result in live_results:
+        winner = result["winner"]
+        loser = result["loser"]
+        method = result["method"]
+        fight_id = f"{winner}_vs_{loser}"
+
+        if fight_id in history:
+            print(f"   ⏭️  Already posted: {winner} vs {loser}")
+            continue
+
         print(f"\n   🆕 NEW RESULT: {winner} defeats {loser} via {method}")
-        
-        # Find our prediction
-        matchup_key = f"{winner} vs {loser}"
-        our_prediction = predictions.get(matchup_key) or predictions.get(f"{loser} vs {winner}")
-        
-        # Generate reaction
+
+        our_prediction = _find_prediction(predictions, winner, loser)
         reaction = generate_reaction(winner, loser, method, our_prediction)
         print(f"   💬 Reaction: {reaction}")
-        
-        # Post to Twitter
+
         tweet_id = post_live_reaction(reaction)
-        
         if tweet_id:
-            # Save to history
             history[fight_id] = {
-                'winner': winner,
-                'loser': loser,
-                'method': method,
-                'reaction': reaction,
-                'tweet_id': tweet_id,
-                'timestamp': datetime.now().isoformat()
+                "winner": winner,
+                "loser": loser,
+                "method": method,
+                "reaction": reaction,
+                "tweet_id": str(tweet_id),
+                "timestamp": datetime.now().isoformat(),
             }
             save_history(history)
+            posted += 1
+            time.sleep(10)  # Rate limit between fight tweets
+
+    return posted
+
 
 def run_live_wire_continuous():
-    """
-    Continuous monitoring mode: Poll every 60 seconds during event hours.
-    """
-    print("="*60)
+    card = load_card()
+    if not is_fight_night(card):
+        print("   ⏭️ Not fight night (card date ≠ today). Exiting.")
+        print(f"   Card: {card.get('event', '?')} on {card.get('date', '?')}")
+        return
+
+    print("=" * 60)
     print("🔥 LIVE WIRE: REAL-TIME FIGHT NIGHT COMMENTARY")
-    print("="*60)
-    print(f"Poll Interval: {POLL_INTERVAL} seconds")
-    print(f"Press Ctrl+C to stop")
-    print("="*60)
-    
+    print("=" * 60)
+    print(f"Event: {card.get('event', 'Unknown')}")
+    print(f"Poll interval: {POLL_INTERVAL}s | Max runtime: {MAX_RUNTIME_HOURS}h")
+    print("=" * 60)
+
+    deadline = datetime.now() + timedelta(hours=MAX_RUNTIME_HOURS)
     try:
-        while True:
+        while datetime.now() < deadline:
             run_live_wire_once()
             time.sleep(POLL_INTERVAL)
-    
     except KeyboardInterrupt:
         print("\n\n✅ Live Wire stopped by user.")
+        return
 
-import argparse
+    print(f"\n✅ Live Wire finished after {MAX_RUNTIME_HOURS}h window.")
+
 
 def main():
     parser = argparse.ArgumentParser(description="FightIQ Live Wire")
-    parser.add_argument("--auto", action="store_true", help="Run in continuous monitoring mode automatically")
+    parser.add_argument("--auto", action="store_true", help="Continuous monitoring (fight night)")
+    parser.add_argument("--once", action="store_true", help="Single poll (test / manual)")
+    parser.add_argument("--force", action="store_true", help="Run even if not fight night (test)")
     args = parser.parse_args()
 
     print("--- 🔥 LIVE WIRE SYSTEM ---")
-    
+
+    if args.once or (not args.auto and not args.force):
+        if not args.force and not is_fight_night():
+            print("   ℹ️  Not fight night. Use --force to poll anyway.")
+        n = run_live_wire_once()
+        print(f"   Done. Posted {n} new reaction(s).")
+        return
+
     if args.auto:
-        print("   🚀 Auto Mode Activated: Starting Continuous Monitoring...")
+        if not args.force and not is_fight_night():
+            print("   ⏭️ Not fight night — cron should only run Sat/Sun on card date.")
+            print(f"   Today: {datetime.now().date()} | Card date: {load_card().get('date')}")
+            return
         run_live_wire_continuous()
         return
 
-    print("\nOptions:")
-    print("1. Run single poll (test mode)")
-    print("2. Run continuous monitoring (fight night mode)")
-    
-    choice = input("\nSelect option (1-2): ").strip()
-    
-    if choice == "1":
-        run_live_wire_once()
-    elif choice == "2":
-        run_live_wire_continuous()
-    else:
-        print("Invalid option")
+    print("Usage: python modules/_13_live_wire.py --auto | --once [--force]")
+
 
 if __name__ == "__main__":
     main()

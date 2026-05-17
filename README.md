@@ -44,7 +44,7 @@ Full AI analysis pipeline:
 5. Gemini AI predictions → `data/3_results.json`
 6. Generates visual cards + radar charts → `output/visuals/`
 7. Creates matchup video reels (TTS) → `output/visuals/*.mp4`
-8. Builds betting slips → `data/4_parlays.json`
+8. Builds betting slips (Safe / Violence / Edge) → `data/4_parlays.json`
 9. Generates ticket images (Imagen API) → `output/visuals/Ticket_*.png`
 10. Posts to Twitter → Done
 
@@ -60,6 +60,8 @@ Daily fighter spotlight content, rotated by day of week:
 | Wednesday | VIOLENCE | Finish-rate highlighters |
 | Thursday | HISTORY | Veteran throwbacks |
 | Friday | ANOMALY | Betting value/stat gaps |
+| Saturday | STANDARD | Fighter spotlight (IDLE) |
+| Sunday | STANDARD | Fighter spotlight + stat card (IDLE) |
 
 **Cost**: ~$0.05–0.10/day | **Time**: ~2 min
 

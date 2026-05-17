@@ -433,30 +433,31 @@ def generate_history_content(fighter_data):
 def get_dynamic_weights():
     """
     Returns weights for [STANDARD, VIOLENCE, ORACLE, ANOMALY, HISTORY]
-    based on the current day of the week to align with idle_schedule.md.
+    based on the current day of the week.
     """
-    day = datetime.today().weekday() # 0=Mon, 1=Tue, ..., 6=Sun
-    
-    # Default: Balanced but Standard heavy
-    weights = [30, 15, 15, 25, 15]
-    
-    # STRICTER ENFORCEMENT (90% Priority)
-    if day == 1: # TUESDAY (Engagement/polls) -> Oracle
+    day = datetime.today().weekday()  # 0=Mon … 6=Sun
+
+    # Mon / Sat / Sun: reliable single-fighter spotlight (image + 1 stat reply)
+    if day in (0, 5, 6):
+        label = {0: "MONDAY", 5: "SATURDAY", 6: "SUNDAY"}[day]
+        print(f"   📅 Schedule: STANDARD {label} (Strict)")
+        return [90, 3, 2, 3, 2]
+
+    if day == 1:
         print("   📅 Schedule: ORACLE TUESDAY (Strict)")
-        weights = [2, 2, 90, 3, 3]
-    elif day == 2: # WEDNESDAY (Violence)
+        return [2, 2, 90, 3, 3]
+    if day == 2:
         print("   📅 Schedule: VIOLENCE WEDNESDAY (Strict)")
-        weights = [2, 90, 2, 3, 3]
-    elif day == 3: # THURSDAY (Throwback) -> History
+        return [2, 90, 2, 3, 3]
+    if day == 3:
         print("   📅 Schedule: THROWBACK THURSDAY (Strict)")
-        weights = [2, 2, 2, 3, 90]
-    elif day == 4: # FRIDAY (Betting/Wolf Tickets) -> Anomaly
+        return [2, 2, 2, 3, 90]
+    if day == 4:
         print("   📅 Schedule: WOLF TICKET FRIDAY (Strict)")
-        weights = [2, 2, 2, 90, 3]
-    else:
-        print("   📅 Schedule: STANDARD ROTATION")
-        
-    return weights
+        return [2, 2, 2, 90, 3]
+
+    print("   📅 Schedule: STANDARD ROTATION")
+    return [30, 15, 15, 25, 15]
 
 # --- MAIN LOOP ---
 
@@ -941,8 +942,10 @@ def main():
         poll_opts = None
     
     card_abs_path = get_output_path(card_rel_path, "visuals")
-    yt_link = f"https://www.youtube.com/results?search_query={urllib.parse.quote(fighter_name + ' ufc highlights')}"
-    
+    if not os.path.exists(card_abs_path):
+        print(f"   ❌ FATAL: Visual not created at {card_abs_path}")
+        return
+
     video_path = None
     if VideoEngine and ai_content.get('video_script'):
         try:
@@ -956,16 +959,28 @@ def main():
             print(f"   ⚠️ Video rendering failed (continuing without video): {type(e).__name__}: {str(e)[:80]}")
             video_path = None
     
+    # Build thread: main tweet + one stat reply (no generic YouTube search spam)
+    stat_line = ai_content.get("stat_reply", "").strip()
+    thread = [ai_content["main_tweet"]]
+    if stat_line:
+        prefix = f"📊 {mode}: "
+        reply = stat_line if stat_line.startswith("📊") else f"{prefix}{stat_line}"
+        if len(reply) > 275:
+            reply = reply[:272] + "..."
+        thread.append(reply)
+
+    if mode == "ORACLE" and poll_opts:
+        thread.append(
+            f"🗳️ Who wins? Reply {poll_opts[0]} or {poll_opts[1]} — RT for reach. #FightIQ"
+        )
+
     final_output = {
         "fighter": fighter_name,
-        "visual_path": f"visuals/{card_rel_path}",
+        "mode": mode,
+        "visual_path": card_abs_path,
         "video_path": video_path,
-        "thread": [
-            ai_content['main_tweet'],
-            f"📊 {mode} STATS: {ai_content['stat_reply']}",
-            f"📺 MORE ACTION:\n{yt_link}"
-        ],
-        "poll_options": poll_opts
+        "thread": thread,
+        "poll_options": None,
     }
     
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:

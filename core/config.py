@@ -58,8 +58,18 @@ FUZZY_MATCH_CUTOFF_LOW = 0.6       # BFO/Fallback Low Confidence
 # ==========================================
 
 # Fight Week - Parlay Thresholds
-PARLAY_SAFE_CONFIDENCE = 8      # Min confidence for safe slip
-PARLAY_VIOLENCE_SCORE = 80      # Min violence score for violence slip
+PARLAY_SAFE_CONFIDENCE = 7          # Min confidence for safe slip (primary)
+PARLAY_SAFE_CONFIDENCE_FALLBACK = 6 # Used when building fallback safe slip
+PARLAY_VIOLENCE_SCORE = 75          # Min violence score for violence slip (primary)
+PARLAY_VIOLENCE_SCORE_FALLBACK = 65 # Fallback violence slip
+PARLAY_MAX_LEGS = 3                 # Max legs per slip (all types)
+
+# Value / Edge slip — model-aligned, winnable 3-leg parlay
+VALUE_SLIP_MIN_CONFIDENCE = 6
+VALUE_SLIP_MIN_LEG_ODDS = 1.45
+VALUE_SLIP_MAX_LEG_ODDS = 8.0   # Method / rounds props allowed on edge slip
+VALUE_SLIP_MAX_COMBINED_ODDS = 25.0
+SAFE_SLIP_MAX_ODDS = 2.25
 
 # Fight Week - AI Rate Limiting
 AI_REQUEST_DELAY_SECONDS = 3    # Delay between AI requests
@@ -77,6 +87,7 @@ ORACLE_PREFER_TRENDING = True       # Prioritize trending fighters
 # ==========================================
 
 LIVE_WIRE_POLL_INTERVAL = 60       # Seconds between checks in continuous mode
+LIVE_WIRE_MAX_RUNTIME_HOURS = 8    # --auto mode stops after this many hours
 SPOTLIGHT_HISTORY_DAYS = 90        # Days to look back for content history
 
 # ==========================================
@@ -102,7 +113,8 @@ IMAGEN_MODEL_FALLBACKS = [
 ]
 
 # AI Configuration
-AI_TEMPERATURE = 0.4  # Increased for creative reasoning (was 0.2)
+AI_TEMPERATURE = 0.4  # Spotlight / creative content
+AI_TEMPERATURE_PREDICTION = 0.25  # Fight Brain — tighter, sharper picks
 AI_TOP_P = 0.95       # Nucleus sampling for diverse outputs
 AI_TOP_K = 40         # Limit vocabulary to top 40 tokens
 

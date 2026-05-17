@@ -393,10 +393,11 @@ def derive_versus_bar_scores(stats, deep):
     sapm = _float_stat(stats, "SApM")
     td_avg = _float_stat(stats, "TD_Avg")
     sub_avg = _float_stat(stats, "Sub_Avg")
-    ko_rate = float(deep.get("ko_rate") or 0)
-    sub_rate = float(deep.get("sub_rate") or 0)
-    dec_rate = float(deep.get("dec_rate") or 0)
-    avg_sec = float(deep.get("avg_fight_time_sec") or 540)
+    from core.numeric_safe import safe_float
+    ko_rate = safe_float(deep.get("ko_rate"))
+    sub_rate = safe_float(deep.get("sub_rate"))
+    dec_rate = safe_float(deep.get("dec_rate"))
+    avg_sec = safe_float(deep.get("avg_fight_time_sec"), 540)
 
     power = int(min(88, max(48, 44 + ko_rate * 0.48 + slpm * 2.35)))
     sig_diff = slpm - sapm
@@ -420,19 +421,23 @@ def derive_versus_bar_scores(stats, deep):
 
 
 def versus_bar_scores_for_card(spotlight, stats, deep):
-    st = stats if isinstance(stats, dict) else {}
-    has_official = bool(st.get("SLpM") or st.get("Str_Acc") or st.get("Str_Def"))
-    if has_official:
-        return derive_versus_bar_scores(st, deep if isinstance(deep, dict) else {})
+    """
+    Prefer Fight Brain computed_ratings (matchup-relative, balanced).
+    Fallback to official-stat formula only if spotlight missing.
+    """
+    keys = ("power", "striking", "grappling", "stamina", "chin", "technique")
     if isinstance(spotlight, dict) and spotlight:
         out = {}
-        for k in ("power", "technique", "grappling", "stamina", "chin"):
-            v = spotlight.get(k, 70)
-            try:
-                out[k] = int(v) if not isinstance(v, str) else int("".join(c for c in v if c.isdigit()) or 70)
-            except Exception:
-                out[k] = 70
-        return out
+        for k in keys:
+            if k in spotlight:
+                try:
+                    v = spotlight[k]
+                    out[k] = int(v) if not isinstance(v, str) else int("".join(c for c in str(v) if c.isdigit()) or 50)
+                except Exception:
+                    out[k] = 50
+        if len(out) >= 5:
+            return out
+    st = stats if isinstance(stats, dict) else {}
     return derive_versus_bar_scores(st, deep if isinstance(deep, dict) else {})
 
 

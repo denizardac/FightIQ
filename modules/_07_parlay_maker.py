@@ -3,15 +3,19 @@ import os
 import re
 import sys
 
-# Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import core.config as config
 from core.paths import get_data_path
 from core.odds_converter import american_to_decimal
+from core.odds_resolve import resolve_pick_odds
+from core.parlay_logic import (
+    pick_matches_winner,
+    leg_odds_ok,
+    combined_odds,
+    edge_score,
+    trim_slip,
+)
 
-# ==========================================
-# ⚙️ AYARLAR
-# ==========================================
 INPUT_FILE = get_data_path("3_results.json")
 MARKETS_FILE = get_data_path("2_data_final.json")
 OUTPUT_FILE = get_data_path("4_parlays.json")
@@ -42,7 +46,6 @@ def _to_conf_int(v):
 
 
 def _odds_to_decimal(val):
-    """Normalize AI / JSON odds to a single decimal price for tickets."""
     if val is None or val == "" or val == 0:
         return None
     if isinstance(val, dict):
@@ -70,7 +73,6 @@ def _odds_to_decimal(val):
             return None
     try:
         fv = float(val)
-        # Heuristic: AI sometimes outputs American as float (e.g. 250.0 for +250)
         if fv > 50:
             try:
                 return american_to_decimal(int(fv))
@@ -103,7 +105,6 @@ def _load_markets_by_matchup():
 
 
 def _moneyline_map(market_data):
-    """Flatten Moneyline / Kazanır / 1x2 markets to fighter_name_lower -> decimal."""
     if not isinstance(market_data, dict):
         return {}
     flat = {}
@@ -123,12 +124,10 @@ def _moneyline_map(market_data):
 
 
 def _decimal_for_fighter(pick_text, f1, f2, ml_flat):
-    """Pick best decimal for a pick string using moneyline map."""
     if not pick_text or not ml_flat:
         return None
     pt = pick_text.lower()
     f1l, f2l = f1.strip().lower(), f2.strip().lower()
-    # Exact / substring match on book keys
     for name, dec in ml_flat.items():
         if not name:
             continue
@@ -142,26 +141,166 @@ def _decimal_for_fighter(pick_text, f1, f2, ml_flat):
     return None
 
 
-def _enrich_odds(pick_text, matchup, ai_odds, markets_by_matchup):
-    dec = _odds_to_decimal(ai_odds)
-    if dec and 1.02 < dec < 80:
-        return dec
+def _enrich_odds(pick_text, matchup, ai_odds, markets_by_matchup, bet_type="ml", winner="", method="Dec"):
     key = _norm_matchup_key(matchup)
-    if not key:
-        return dec or None
-    md = markets_by_matchup.get(key) or {}
-    ml = _moneyline_map(md)
-    if " vs " not in matchup:
-        return dec
+    if not key or " vs " not in matchup:
+        return _odds_to_decimal(ai_odds)
     f1, f2 = matchup.split(" vs ", 1)
-    from_ml = _decimal_for_fighter(pick_text, f1, f2, ml)
-    if from_ml and 1.02 < from_ml < 80:
-        return from_ml
-    return dec
+    md = markets_by_matchup.get(key) or {}
+    dec, _, ok = resolve_pick_odds(
+        pick_text, bet_type, md, f1.strip(), f2.strip(), winner, method, ai_odds
+    )
+    return dec if ok else None
+
+
+def _format_pick(text, f1, f2):
+    if not text:
+        return text
+    t = text
+    if "W1" in t and f1:
+        t = t.replace("W1", f1)
+    if "W2" in t and f2:
+        t = t.replace("W2", f2)
+    t = t.replace("Fight to Go the Distance - No", "Fight Does NOT Go Distance")
+    t = t.replace("Fight to Go the Distance: No", "Fight Does NOT Go Distance")
+    return t
+
+
+def _winner_ml_pick(winner, f1, f2, markets_by, matchup, method="Dec"):
+    pick = f"{winner} ML"
+    odds = _enrich_odds(pick, matchup, None, markets_by, "ml", winner, method)
+    return pick, odds
+
+
+def _build_safe_candidates(rows, markets_by):
+    out = []
+    for row in rows:
+        matchup = row["matchup"]
+        data = row["data"]
+        pred = row["pred"]
+        angles = row["angles"]
+        f1, f2 = row["f1"], row["f2"]
+        conf = row["confidence"]
+
+        winner = pred.get("winner", "")
+        method = pred.get("method", "Dec")
+        safe = angles.get("safe_pick", {})
+        pick_text = _format_pick(safe.get("bet", f"{winner} ML"), f1, f2)
+        if not pick_matches_winner(pick_text, winner, f1, f2):
+            pick_text, _ = _winner_ml_pick(winner, f1, f2, markets_by, matchup, method)
+
+        odds = _enrich_odds(
+            pick_text, matchup, safe.get("odds"), markets_by,
+            safe.get("bet_type", "ml"), winner, method,
+        )
+        if not odds or odds < 1.1:
+            continue
+        reason = safe.get("reason", f"Confidence {conf}/10")
+        out.append({
+            "match": matchup,
+            "pick": pick_text,
+            "odds": odds,
+            "reason": reason[:80] + "..." if len(reason) > 80 else reason,
+            "_conf": conf,
+        })
+    out.sort(key=lambda x: (-x["_conf"], x["odds"]))
+    for leg in out:
+        leg.pop("_conf", None)
+    return trim_slip(out)
+
+
+def _build_violence_candidates(rows, markets_by):
+    out = []
+    for row in rows:
+        if row["viol"] < config.PARLAY_VIOLENCE_SCORE_FALLBACK:
+            continue
+        matchup = row["matchup"]
+        pred = row["pred"]
+        winner = pred.get("winner", "")
+        method = pred.get("method", "Dec")
+        violence = row["angles"].get("violence_pick", {})
+        if violence.get("odds_available") is False and not violence.get("odds"):
+            continue
+        pick_text = _format_pick(violence.get("bet", "Fight Does NOT Go Distance"), row["f1"], row["f2"])
+        odds = _enrich_odds(
+            pick_text, matchup, violence.get("odds"), markets_by,
+            violence.get("bet_type", "distance_no"), winner, method,
+        )
+        if not odds or odds < 1.1:
+            continue
+        reason = violence.get("reason", f"Violence {row['viol']}/100")
+        out.append({
+            "match": matchup,
+            "pick": pick_text,
+            "odds": odds,
+            "reason": reason[:80] + "..." if len(reason) > 80 else reason,
+            "_viol": row["viol"],
+        })
+    out.sort(key=lambda x: -x["_viol"])
+    for leg in out:
+        leg.pop("_viol", None)
+    return trim_slip(out)
+
+
+def _build_value_candidates(rows, markets_by):
+    """Model edge slip: predicted winner, reasonable odds, top confidence."""
+    candidates = []
+    for row in rows:
+        matchup = row["matchup"]
+        pred = row["pred"]
+        angles = row["angles"]
+        f1, f2 = row["f1"], row["f2"]
+        conf = row["confidence"]
+        winner = pred.get("winner", "")
+
+        if conf < config.VALUE_SLIP_MIN_CONFIDENCE:
+            continue
+
+        value = angles.get("value_pick") or angles.get("edge_pick") or {}
+        pick_text = _format_pick(value.get("bet", ""), f1, f2)
+
+        method = pred.get("method", "Dec")
+        if not pick_text or not pick_matches_winner(pick_text, winner, f1, f2):
+            pick_text, odds = _winner_ml_pick(winner, f1, f2, markets_by, matchup, method)
+        else:
+            odds = _enrich_odds(
+                pick_text, matchup, value.get("odds"), markets_by,
+                value.get("bet_type", "ml"), winner, method,
+            )
+
+        if not odds:
+            pick_text, odds = _winner_ml_pick(winner, f1, f2, markets_by, matchup, method)
+        if not odds or not leg_odds_ok(odds, getattr(config, "VALUE_SLIP_MAX_LEG_ODDS", 8.0)):
+            continue
+
+        reason = value.get("reason", pred.get("key_factor", "Model edge"))
+        score = edge_score(conf, odds)
+        candidates.append({
+            "match": matchup,
+            "pick": pick_text,
+            "odds": odds,
+            "reason": reason[:80] + "..." if len(reason) > 80 else reason,
+            "_score": score,
+            "_conf": conf,
+        })
+
+    candidates.sort(key=lambda x: (-x["_score"], -x["_conf"]))
+    trimmed = []
+    for leg in candidates:
+        leg.pop("_score", None)
+        leg.pop("_conf", None)
+        trimmed.append(leg)
+        if len(trimmed) >= config.PARLAY_MAX_LEGS:
+            break
+
+    # Drop lowest-confidence leg if combined odds too high
+    while len(trimmed) > 1 and combined_odds(trimmed) > config.VALUE_SLIP_MAX_COMBINED_ODDS:
+        trimmed.pop()
+    return trimmed
 
 
 def main():
-    print("--- 🎫 STEP 7: PARLAY MAKER (COUPON ENGINE) ---")
+    print("--- 🎫 STEP 7: PARLAY MAKER (EDGE COUPON ENGINE) ---")
 
     try:
         with open(INPUT_FILE, "r", encoding="utf-8") as f:
@@ -171,15 +310,7 @@ def main():
         return
 
     markets_by = _load_markets_by_matchup()
-
-    parlays = {
-        "safe_slip": [],
-        "violence_slip": [],
-        "value_slip": [],
-        "metadata": {"total_analyzed": len(results), "markets_enriched": bool(markets_by)},
-    }
-
-    print(f"📊 Analyzing {len(results)} fights for betting angles...")
+    rows = []
 
     for item in results:
         matchup = item.get("matchup", "")
@@ -190,75 +321,51 @@ def main():
         pred = data.get("prediction", {})
         viol = data.get("violence_score", 0)
         angles = data.get("betting_angles", {})
-
         fighters = matchup.split(" vs ")
-        f1 = fighters[0].strip() if len(fighters) > 0 else ""
+        f1 = fighters[0].strip() if fighters else ""
         f2 = fighters[1].strip() if len(fighters) > 1 else ""
-
-        def format_pick(text):
-            if not text:
-                return text
-            t = text
-            if "W1" in t and f1:
-                t = t.replace("W1", f1)
-            if "W2" in t and f2:
-                t = t.replace("W2", f2)
-            t = t.replace("Fight to Go the Distance - No", "Fight Does NOT Go Distance")
-            t = t.replace("Fight to Go the Distance: No", "Fight Does NOT Go Distance")
-            return t
-
         confidence = _to_conf_int(pred.get("confidence", 0))
-        if confidence >= config.PARLAY_SAFE_CONFIDENCE:
-            safe = angles.get("safe_pick", {})
-            pick_text = format_pick(safe.get("bet", f"{pred.get('winner', 'Favorite')} ML"))
-            odds = _enrich_odds(pick_text, matchup, safe.get("odds"), markets_by)
-            if not odds:
-                odds = 1.85
-            reason = safe.get("reason", f"High Confidence ({confidence}/10)")
-            parlays["safe_slip"].append(
-                {
-                    "match": matchup,
-                    "pick": pick_text,
-                    "odds": odds,
-                    "reason": reason[:80] + "..." if len(reason) > 80 else reason,
-                }
-            )
 
-        if isinstance(viol, (int, float)) and viol >= config.PARLAY_VIOLENCE_SCORE:
-            violence = angles.get("violence_pick", {})
-            pick_text = format_pick(violence.get("bet", "Fight Does NOT Go Distance"))
-            odds = _enrich_odds(pick_text, matchup, violence.get("odds"), markets_by)
-            if not odds:
-                odds = 1.75
-            reason = violence.get("reason", f"Violence Score: {viol}/100. Finish likely.")
-            parlays["violence_slip"].append(
-                {
-                    "match": matchup,
-                    "pick": pick_text,
-                    "odds": odds,
-                    "reason": reason[:80] + "..." if len(reason) > 80 else reason,
-                }
-            )
+        rows.append({
+            "matchup": matchup,
+            "data": data,
+            "pred": pred,
+            "angles": angles,
+            "f1": f1,
+            "f2": f2,
+            "confidence": confidence,
+            "viol": viol if isinstance(viol, (int, float)) else 0,
+        })
 
-        value = angles.get("value_pick", {})
-        if value and value.get("bet"):
-            pick_text = format_pick(value.get("bet"))
-            odds = _enrich_odds(pick_text, matchup, value.get("odds"), markets_by)
-            if not odds:
-                odds = 2.4
-            reason = value.get("reason", "AI Edge")
-            parlays["value_slip"].append(
-                {
-                    "match": matchup,
-                    "pick": pick_text,
-                    "odds": odds,
-                    "reason": reason[:80] + "..." if len(reason) > 80 else reason,
-                }
-            )
+    print(f"📊 Analyzing {len(rows)} fights for betting angles...")
 
-    print(f"   ✅ Safe Picks: {len(parlays['safe_slip'])}")
-    print(f"   ✅ Violence Picks: {len(parlays['violence_slip'])}")
-    print(f"   ✅ Value Picks: {len(parlays['value_slip'])}")
+    safe_primary = [r for r in rows if r["confidence"] >= config.PARLAY_SAFE_CONFIDENCE]
+    safe_fallback = [r for r in rows if r["confidence"] >= config.PARLAY_SAFE_CONFIDENCE_FALLBACK]
+
+    viol_primary = [r for r in rows if r["viol"] >= config.PARLAY_VIOLENCE_SCORE]
+    viol_fallback = [r for r in rows if r["viol"] >= config.PARLAY_VIOLENCE_SCORE_FALLBACK]
+
+    safe_slip = _build_safe_candidates(safe_primary or safe_fallback, markets_by)
+    violence_slip = _build_violence_candidates(viol_primary or viol_fallback, markets_by)
+    value_slip = _build_value_candidates(rows, markets_by)
+
+    parlays = {
+        "safe_slip": safe_slip,
+        "violence_slip": violence_slip,
+        "value_slip": value_slip,
+        "metadata": {
+            "total_analyzed": len(results),
+            "markets_enriched": bool(markets_by),
+            "safe_primary_count": len(safe_primary),
+            "violence_primary_count": len(viol_primary),
+            "value_candidates": len(value_slip),
+            "combined_value_odds": combined_odds(value_slip),
+        },
+    }
+
+    print(f"   ✅ Safe Picks: {len(safe_slip)} (primary threshold: {len(safe_primary)} fights)")
+    print(f"   ✅ Violence Picks: {len(violence_slip)} (primary threshold: {len(viol_primary)} fights)")
+    print(f"   ✅ Edge/Value Picks: {len(value_slip)} @ {parlays['metadata']['combined_value_odds']}")
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(parlays, f, indent=4)

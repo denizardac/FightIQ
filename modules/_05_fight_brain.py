@@ -9,7 +9,12 @@ from dotenv import load_dotenv
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path
-import core.config as config # P2: Explicit config import
+import core.config as config
+from core.prediction_validate import implied_probability, validate_and_unify
+from core.market_catalog import summarize_markets_for_prompt
+from core.numeric_safe import safe_float
+from core.scout_enrich import enrich_scout, build_matchup_context
+from core.fighter_rating import compute_matchup_bars, style_one_liner
 
 # UTF-8 Encoding
 try:
@@ -69,14 +74,17 @@ from tenacity import retry, wait_exponential, stop_after_attempt
 
 # ... (Helper)
 @retry(wait=wait_exponential(multiplier=1, min=4, max=60), stop=stop_after_attempt(5))
-def generate_with_retry(model_name, prompt):
+def generate_with_retry(model_name, prompt, temperature=None):
     """Generates content with exponential backoff for 429/503 errors."""
+    temp = temperature if temperature is not None else getattr(
+        config, "AI_TEMPERATURE_PREDICTION", config.AI_TEMPERATURE
+    )
     return client.models.generate_content(
         model=model_name,
         contents=prompt,
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            temperature=config.AI_TEMPERATURE,
+            temperature=temp,
             top_p=config.AI_TOP_P,
             top_k=config.AI_TOP_K,
         )
@@ -123,6 +131,12 @@ def _extract_scout_data(deep_list, stats_list, f1, f2):
                 break
         return wins, losses
 
+    def _rate(ds, key):
+        raw = ds.get(key)
+        if raw not in (None, "", "N/A", "--"):
+            return safe_float(raw)
+        return 0.0
+
     def scout(name, ds, st):
         last_5 = ds.get('last_5_results', st.get('last_5', []))
         win_streak, loss_streak = _compute_streaks(last_5)
@@ -145,9 +159,9 @@ def _extract_scout_data(deep_list, stats_list, f1, f2):
             "TD_Def":          _first(st.get('TD_Def')),
             "Sub_Avg":         _first(st.get('Sub_Avg')),
             # Finish rates (from deep_dive computed fields)
-            "KO_rate":         _first(ds.get('ko_rate')),
-            "Sub_rate":        _first(ds.get('sub_rate')),
-            "Dec_rate":        _first(ds.get('dec_rate')),
+            "KO_rate":         _rate(ds, "ko_rate"),
+            "Sub_rate":        _rate(ds, "sub_rate"),
+            "Dec_rate":        _rate(ds, "dec_rate"),
             "first_round_finishes": ds.get('first_round_finishes', 0),
             # Momentum
             "last_5_results":  last_5,
@@ -191,13 +205,29 @@ def analyze_matchup(fight_data):
         print(f"   ⚠️ News parsing skipped: {type(e).__name__}: {str(e)[:60]}")
 
     scout1, scout2 = _extract_scout_data(deep, stats, f1, f2)
+    n1 = news_list[0] if isinstance(news_list, list) and len(news_list) > 0 and isinstance(news_list[0], list) else []
+    n2 = news_list[1] if isinstance(news_list, list) and len(news_list) > 1 and isinstance(news_list[1], list) else []
+    scout1 = enrich_scout(scout1, n1)
+    scout2 = enrich_scout(scout2, n2)
+    matchup_ctx = build_matchup_context(scout1, scout2, n1, n2)
     print(f"🧠 Analyzing: {f1} vs {f2}...")
 
     try:
         odds_json = json.dumps(market) if isinstance(market, dict) else str(market)
+        market_summary = summarize_markets_for_prompt(market, f1, f2)
 
-        prompt = f"""You are FightIQ — an elite MMA analyst and viral social media content creator.
-Analyze this UFC matchup with precision and generate structured JSON output.
+        prompt = f"""You are FightIQ — a professional MMA betting analyst (sharp, data-driven).
+Analyze this UFC matchup. Pick the BEST AVAILABLE BET TYPE from the market board (not always ML).
+
+CRITICAL RULES:
+1. ONE winner in prediction.winner — all winner-side bets must match this name.
+2. safe_pick = lowest-risk bet (often favorite ML, or Fight Goes Distance if grinders).
+3. value_pick = highest-edge bet on the winner OR fight total (method, rounds, ML) — use real odds from the board.
+4. violence_pick = Over/Under rounds OR distance market aligned with violence_score (finishes vs decision).
+5. Each pick MUST include bet_type: ml | ko | sub | dec | over | under | distance_yes | distance_no
+6. If a method/rounds line offers better value than ML, USE IT for value_pick and say so in betting_tweet.
+7. Confidence 1–10: 8+ only when stats + market align. Cite numbers (SLpM, TD%, ranking_proxy, injury flags).
+8. Do NOT invent odds — copy from AVAILABLE MARKETS or use 0.0.
 
 ═══════════════════════════════════════════════════
 MATCHUP: {f1.upper()} vs {f2.upper()}
@@ -209,9 +239,13 @@ MATCHUP: {f1.upper()} vs {f2.upper()}
 [FIGHTER 2 — {f2}]
 {json.dumps(scout2, indent=2)}
 
-[BETTING MARKET]
-Current Odds & Lines: {odds_json}
-Line Movement (last 3 updates): {line_movement_text}
+[MATCHUP CONTEXT — derived]
+{json.dumps(matchup_ctx, indent=2)}
+
+[AVAILABLE MARKETS — pick from these lines]
+{market_summary}
+Line Movement: {line_movement_text}
+Full JSON: {odds_json}
 
 [RECENT NEWS]
 {news_text}
@@ -226,8 +260,10 @@ Use ALL provided data. Key factors to consider:
 - Age and career trajectory (decline after ~33 for most fighters)
 - Last 5 results for momentum and psychological state
 - Line movement direction (sharp money vs public betting)
-- KO/Sub rates for violence prediction
-- Takedown accuracy vs defense for grappling dominance
+- KO/Sub rates, finish_rate_pct, ranking_proxy (experience/quality proxy)
+- injury_news_flag in scout data — downgrade confidence if True for your pick
+- Reach / stance / momentum from MATCHUP CONTEXT
+- Opponent quality via win_rate_pct and total_fights
 
 ═══════════════════════════════════════════════════
 OUTPUT (strict JSON, no markdown)
@@ -247,52 +283,58 @@ Return ONLY this JSON object:
 
   "betting_angles": {{
     "safe_pick": {{
-      "bet": "<Fighter Moneyline or method prop>",
-      "odds": <exact decimal from provided odds, 0.0 if unavailable>,
-      "reason": "<2-3 sentences tying stats to outcome, mention specific numbers>"
+      "bet": "<exact market label e.g. 'Fighter ML' or 'Under 2.5 Rounds' or 'Fight Goes Distance'>",
+      "bet_type": "<ml|ko|sub|dec|over|under|distance_yes|distance_no>",
+      "odds": <decimal from board or 0.0>,
+      "reason": "<2 sentences with stats>"
     }},
     "violence_pick": {{
-      "bet": "<Under X.5 rounds, W1 by KO, or Fight to go distance>",
-      "odds": <exact decimal, 0.0 if unavailable>,
-      "reason": "<2-3 sentences citing SLpM, KO%, finish rate>"
+      "bet": "<Over 2.5 / Under 2.5 / Fight Does NOT Go Distance / etc. from board>",
+      "bet_type": "<over|under|distance_yes|distance_no|ko>",
+      "odds": <decimal or 0.0>,
+      "reason": "<2 sentences>"
     }},
     "value_pick": {{
-      "bet": "<underdog or contrarian prop>",
-      "odds": <exact decimal, 0.0 if unavailable>,
-      "reason": "<2-3 sentences. Reference line movement if relevant>"
-    }}
-  }},
-
-  "spotlight_stats": {{
-    "{f1}": {{
-      "power": <0-100>,
-      "grappling": <0-100>,
-      "stamina": <0-100>,
-      "chin": <0-100>,
-      "technique": <0-100>,
-      "one_liner": "<MAX 4 WORDS. Style label. e.g. 'Elite Pressure Wrestler', 'Power KO Artist', 'Slick Southpaw Boxer'>"
-    }},
-    "{f2}": {{
-      "power": <0-100>,
-      "grappling": <0-100>,
-      "stamina": <0-100>,
-      "chin": <0-100>,
-      "technique": <0-100>,
-      "one_liner": "<MAX 4 WORDS. Style label.>"
+      "bet": "<BEST EDGE bet on winner or fight total — method prop preferred when finish likely>",
+      "bet_type": "<ml|ko|sub|dec|over|under|...>",
+      "odds": <decimal or 0.0>,
+      "reason": "<why this line beats ML value>"
     }}
   }},
 
   "content_tweets": {{
-    "analysis_tweet": "<Max 260 chars. Tuesday deep dive. Lead with a surprising stat or data point. Include fighter names, key numbers, outcome prediction. English only. No hashtags in body — end with 2 max: #UFC #MMA>",
-    "violence_tweet": "<Max 260 chars. Thursday hype. Lead with violence score. Raw energy, aggressive tone. End with #UFC>",
-    "betting_tweet": "<Max 260 chars. Friday betting. Lead with the best pick, exact odds. Mention line movement if relevant. End with #UFC #Betting>"
+    "analysis_tweet": "<Max 260 chars. Stat-led preview + winner. End #UFC #MMA>",
+    "violence_tweet": "<Max 260 chars. Violence score + finish angle. End #UFC>",
+    "betting_tweet": "<Max 260 chars. State EXACT bet from value_pick (not always ML). Include odds. End #UFC #Betting>"
   }},
 
   "spotlight_content": "<Max 275 chars. Wednesday Fighter Spotlight. Start with: 🔦 SPOTLIGHT: [Name]. Hook with the most jaw-dropping stat or career moment. English only.>"
 }}"""
 
         response = generate_with_retry(active_model, prompt)
-        return json.loads(clean_json(response.text))
+        output = json.loads(clean_json(response.text))
+        output = validate_and_unify(
+            output, f1, f2,
+            market if isinstance(market, dict) else {},
+            scout1, scout2,
+        )
+        # Deterministic bars for visuals (no AI 96 vs 49)
+        d0 = deep[0] if isinstance(deep, list) and len(deep) > 0 else {}
+        d1 = deep[1] if isinstance(deep, list) and len(deep) > 1 else {}
+        bars = compute_matchup_bars(scout1, scout2, d0, d1)
+        winner = output.get("prediction", {}).get("winner", f1)
+        output["computed_ratings"] = bars
+        output["spotlight_stats"] = {
+            f1: {
+                **bars["fighter1"],
+                "one_liner": style_one_liner(scout1, d0),
+            },
+            f2: {
+                **bars["fighter2"],
+                "one_liner": style_one_liner(scout2, d1),
+            },
+        }
+        return output
         
     except Exception as e:
         print(f"   ⚠️ AI Analysis Error: {e}")

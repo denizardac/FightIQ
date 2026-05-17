@@ -56,7 +56,9 @@ def test_scheduling():
         original_weekday = datetime.today().weekday()
         
         # Calculate weights as if it was this day
-        if day_num == 1:
+        if day_num in (0, 5, 6):
+            weights = [90, 3, 2, 3, 2]
+        elif day_num == 1:
             weights = [2, 2, 90, 3, 3]
         elif day_num == 2:
             weights = [2, 90, 2, 3, 3]

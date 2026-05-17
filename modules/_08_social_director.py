@@ -20,7 +20,9 @@ if DRY_RUN:
 
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from core.paths import get_data_path, VISUALS_DIR
+from core.paths import get_data_path, VISUALS_DIR, PROJECT_ROOT
+from core.parlay_logic import combined_odds
+import core.config as config
 
 load_dotenv()
 COOKIES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "twitter_cookies.json")
@@ -207,47 +209,57 @@ class SocialDirector:
         return self._post_via_twikit(text, media_path=media_path, reply_to_id=reply_to_id)
 
     # --- IDLE MODU (GÜNCELLENDİ: THREAD DESTEĞİ) ---
+    def _resolve_media_path(self, media_file):
+        """Resolve spotlight / parlay image path (VPS-safe)."""
+        if not media_file:
+            return None
+        if os.path.isabs(media_file) and os.path.exists(media_file):
+            return media_file
+        candidates = [
+            media_file,
+            os.path.join(PROJECT_ROOT, media_file.replace("/", os.sep)),
+            os.path.join(FILES["visuals"], os.path.basename(media_file)),
+        ]
+        for path in candidates:
+            if path and os.path.exists(path):
+                return path
+        return None
+
     def post_spotlight_file(self):
-        if not os.path.exists(FILES["spotlight"]): return
+        if not os.path.exists(FILES["spotlight"]):
+            return
         try:
-            with open(FILES["spotlight"], "r") as f: data = json.load(f)
+            with open(FILES["spotlight"], "r") as f:
+                data = json.load(f)
             uid = f"SPOTLIGHT_{data['fighter']}_{datetime.today().strftime('%Y-%m-%d')}"
-            
-            if uid in self.history: return
 
-            # Thread Listesini Al
-            thread_texts = data.get('thread', [])
-            if not thread_texts and 'tweet' in data: # Eski format desteği
-                thread_texts = [data['tweet']]
+            if uid in self.history:
+                return
 
-            print(f"🚀 Posting Spotlight Thread ({len(thread_texts)} tweets)...")
-            
-            # STRATEGY: Twitter gets PNG Card (better aspect ratio for feed)
-            # Video is saved but not posted to Twitter (reserved for TikTok/IG Reels)
-            media_file = data.get('visual_path')  # Always use PNG card for Twitter
-            
-            # Extract Poll Options
-            poll_options = data.get('poll_options')
-            
-            last_id = self.post_tweet(
-                thread_texts[0], 
-                media_path=media_file, 
-                poll_options=poll_options,
-                poll_duration_minutes=1440
-            )
-            
+            thread_texts = [t.strip() for t in data.get("thread", []) if t and t.strip()]
+            if not thread_texts and data.get("tweet"):
+                thread_texts = [data["tweet"]]
+
+            media_file = self._resolve_media_path(data.get("visual_path"))
+            if not media_file:
+                print(f"❌ Spotlight image missing: {data.get('visual_path')}")
+                return
+
+            print(f"🚀 Posting Spotlight ({len(thread_texts)} tweets) + {os.path.basename(media_file)}")
+
+            last_id = self.post_tweet(thread_texts[0], media_path=media_file)
+
             if last_id:
                 self.save_history(uid)
-                # Diğer tweetleri reply olarak at
                 for txt in thread_texts[1:]:
                     if not self.dry_run:
                         time.sleep(5)
-                    last_id = self.post_tweet(txt, reply_to_id=last_id)
-                
-                # Dosyayı silmek yerine saklayalım test için, ya da silelim
-                # os.remove(FILES["spotlight"]) 
-                
-        except Exception as e: print(f"❌ Spotlight Error: {e}")
+                    reply_id = self.post_tweet(txt, reply_to_id=last_id)
+                    if reply_id:
+                        last_id = reply_id
+
+        except Exception as e:
+            print(f"❌ Spotlight Error: {e}")
 
     # --- DİĞER FONKSİYONLAR (AYNI KALACAK) ---
     def post_parlays(self):
@@ -261,56 +273,78 @@ class SocialDirector:
         if uid in self.history:
             return
 
-        def build_slip_caption(slip_key, slip_type, parlays):
-            slip_data = parlays.get(slip_key, [])
-            picks = [x.get('pick', '') for x in slip_data if x.get('pick')][:3]
-            odds_vals = [str(x.get('odds', '')) for x in slip_data if x.get('odds')][:3]
+        def build_slip_caption(slip_type, slip_data):
+            max_legs = config.PARLAY_MAX_LEGS
+            picks = [x.get("pick", "") for x in slip_data if x.get("pick")][:max_legs]
+            odds_vals = [x.get("odds") for x in slip_data if x.get("pick")][:max_legs]
+            total = combined_odds(slip_data[:max_legs])
 
             if slip_type == "safe":
-                intro = "💰 SAFE SLIP — Lock these in.\n"
+                intro = "💰 SAFE SLIP — High-confidence plays.\n"
             elif slip_type == "violence":
-                intro = "🩸 VIOLENCE SLIP — Chaos incoming.\n"
+                intro = "🩸 VIOLENCE SLIP — Finish-focused card.\n"
             else:
-                intro = "💎 VALUE SLIP — Books got this wrong.\n"
+                intro = "💎 EDGE SLIP — Model-backed 3-leg parlay.\n"
 
             lines = []
             for i, pick in enumerate(picks):
-                odds_str = f" @ {odds_vals[i]}" if i < len(odds_vals) else ""
+                odds_str = f" @ {odds_vals[i]}" if i < len(odds_vals) and odds_vals[i] else ""
                 lines.append(f"✅ {pick}{odds_str}")
             body = "\n".join(lines)
+            parlay_line = f"\n🔗 {len(picks)}-leg @ {total}" if len(picks) > 1 and total > 1 else ""
             tag = "#UFC #Betting #FightIQ"
-            full = f"{intro}{body}\n{tag}"
+            full = f"{intro}{body}{parlay_line}\n{tag}"
             return full[:278]
 
         slip_configs = [
-            ('safe_slip',     'safe',     None),
-            ('violence_slip', 'violence', None),
-            ('value_slip',    'value',    None),
+            ("safe_slip", "safe"),
+            ("violence_slip", "violence"),
+            ("value_slip", "value"),
         ]
 
-        last_id = None
-        posted_count = 0
-
-        # Lead tweet
-        lead = "📊 FIGHTIQ PARLAY SLIPS — Fight Week Edition\n\nThree slips. Three strategies. Full breakdown below. 🧵\n#UFC #Betting"
-        lead_id = self.post_tweet(lead)
-        if lead_id:
-            self.save_history(uid)
-            last_id = lead_id
-            posted_count += 1
-            if not self.dry_run:
-                time.sleep(5)
-
-        for slip_key, slip_type, _ in slip_configs:
+        available = []
+        for slip_key, slip_type in slip_configs:
             slip_data = parlays.get(slip_key, [])
             if not slip_data:
+                print(f"   ⏭️ Skipping empty {slip_type} slip")
                 continue
-            caption = build_slip_caption(slip_key, slip_type, parlays)
             ticket_img = self.find_ticket(slip_type)
+            if not ticket_img:
+                print(f"   ⚠️ No ticket image for {slip_type} — run ticket generator")
+                continue
+            available.append((slip_key, slip_type, slip_data, ticket_img))
+
+        if not available:
+            print("   ⚠️ No parlay slips with images to post.")
+            return
+
+        names = {"safe": "Safe", "violence": "Violence", "value": "Edge"}
+        if len(available) == 1:
+            only = names[available[0][1]]
+            lead = (
+                f"📊 FIGHTIQ — {only.upper()} SLIP\n\n"
+                f"Fight week play card below. 🧵\n#UFC #Betting"
+            )
+        else:
+            labels = " · ".join(names[a[1]] for a in available)
+            lead = (
+                f"📊 FIGHTIQ PARLAY SLIPS — Fight Week\n\n"
+                f"{labels}. Full cards below. 🧵\n#UFC #Betting"
+            )
+
+        last_id = self.post_tweet(lead)
+        if not last_id:
+            return
+
+        self.save_history(uid)
+        if not self.dry_run:
+            time.sleep(5)
+
+        for slip_key, slip_type, slip_data, ticket_img in available:
+            caption = build_slip_caption(slip_type, slip_data)
             tweet_id = self.post_tweet(caption, media_path=ticket_img, reply_to_id=last_id)
             if tweet_id:
                 last_id = tweet_id
-                posted_count += 1
                 if not self.dry_run:
                     time.sleep(5)
 

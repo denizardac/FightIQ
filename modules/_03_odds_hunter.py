@@ -8,6 +8,9 @@ import sys
 import os
 import logging
 import urllib3
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Suppress insecure request warnings for Betist
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -627,6 +630,74 @@ class BestFightOddsEngine:
 # DUAL-SOURCE ORCHESTRATOR
 # ==========================================
 
+def _has_props(odds_dict: dict) -> bool:
+    props = (odds_dict or {}).get("props")
+    return isinstance(props, dict) and bool(props)
+
+
+def _append_source(label: str, name: str) -> str:
+    if not label:
+        return name
+    if name in label:
+        return label
+    return f"{label} + {name}"
+
+
+def _enrich_with_the_odds_api(f1, f2, odds_dict: dict, source_label: str):
+    """The Odds API: h2h + totals (when books list them for MMA)."""
+    try:
+        from core.the_odds_api import _api_key, markets_for_fight, merge_market_data
+    except ImportError:
+        return odds_dict, source_label
+    if not _api_key():
+        return odds_dict, source_label
+    extra = markets_for_fight(f1, f2)
+    if not extra:
+        return odds_dict, source_label
+    merged = merge_market_data(odds_dict or {}, extra)
+    label = _append_source(source_label, "TheOddsAPI")
+    if _has_props(merged):
+        logger.info("The Odds API props for %s vs %s", f1, f2)
+    else:
+        logger.info("The Odds API ML for %s vs %s", f1, f2)
+    return merged, label
+
+
+def _enrich_with_action_network(f1, f2, odds_dict: dict, source_label: str):
+    try:
+        from core.action_network import enrich_fight
+    except ImportError:
+        return odds_dict, source_label
+    merged, ok = enrich_fight(f1, f2, odds_dict or {})
+    if not ok:
+        return odds_dict, source_label
+    return merged, _append_source(source_label, "ActionNetwork")
+
+
+def _enrich_with_oddsportal(f1, f2, odds_dict: dict, source_label: str):
+    try:
+        from core.oddsportal import enrich_fight
+    except ImportError:
+        return odds_dict, source_label
+    merged, ok = enrich_fight(f1, f2, odds_dict or {})
+    if not ok:
+        return odds_dict, source_label
+    label = _append_source(source_label, "OddsPortal")
+    logger.info("OddsPortal markets for %s vs %s", f1, f2)
+    return merged, label
+
+
+def _enrich_secondary_sources(f1, f2, odds_dict: dict, source_label: str):
+    """Fill props/ML gaps: OddsPortal → The Odds API → Action Network (ML)."""
+    merged, label = odds_dict or {}, source_label
+    if not _has_props(merged):
+        merged, label = _enrich_with_oddsportal(f1, f2, merged, label)
+    if not _has_props(merged):
+        merged, label = _enrich_with_the_odds_api(f1, f2, merged, label)
+    merged, label = _enrich_with_action_network(f1, f2, merged, label)
+    return merged, label
+
+
 def get_odds_dual_source(f1, f2, betist_engine, bfo_engine, fight_data=None):
     """
     Attempt to get odds from both sources with priority fallback.
@@ -687,6 +758,9 @@ def get_odds_dual_source(f1, f2, betist_engine, bfo_engine, fight_data=None):
                 if line_movement:
                     odds_result["odds"]["line_movement"] = line_movement
                     logger.info(f"BFO line movement enriched Betist data for {f1} vs {f2}")
+                odds_result["odds"], odds_result["source"] = _enrich_secondary_sources(
+                    f1, f2, odds_result["odds"], odds_result["source"]
+                )
                 return odds_result
             
             # If Betist failed, use BFO as primary source
@@ -746,7 +820,11 @@ def get_odds_dual_source(f1, f2, betist_engine, bfo_engine, fight_data=None):
                 odds_result["odds"]["line_movement"] = line_movement
             if props:
                 odds_result["odds"]["props"] = props
-            
+
+            odds_result["odds"], odds_result["source"] = _enrich_secondary_sources(
+                f1, f2, odds_result["odds"], odds_result["source"]
+            )
+
             logger.info(f"⚠️ BestFightOdds fallback used for {f1} vs {f2}")
             return odds_result
             
@@ -754,8 +832,25 @@ def get_odds_dual_source(f1, f2, betist_engine, bfo_engine, fight_data=None):
         logger.warning(f"BestFightOdds failed for {f1} vs {f2}: {e}")
 
     
-    # CRITICAL: Both sources failed - DO NOT SIMULATE
-    logger.error(f"❌ BOTH SOURCES FAILED for {f1} vs {f2}")
+    # TERTIARY: The Odds API alone (if key configured)
+    try:
+        from core.the_odds_api import _api_key, markets_for_fight
+        if _api_key():
+            api_markets = markets_for_fight(f1, f2)
+            if api_markets:
+                odds_result["source"] = "The Odds API"
+                odds_result["odds"] = api_markets
+                odds_result["confidence"] = "medium"
+                odds_result["odds"], odds_result["source"] = _enrich_secondary_sources(
+                    f1, f2, odds_result["odds"], odds_result["source"]
+                )
+                logger.info(f"The Odds API sole source for {f1} vs {f2}")
+                return odds_result
+    except Exception as e:
+        logger.debug(f"The Odds API fallback skipped: {e}")
+
+    # CRITICAL: All sources failed - DO NOT SIMULATE
+    logger.error(f"❌ ALL SOURCES FAILED for {f1} vs {f2}")
     logger.error("❌ NO ODDS DATA AVAILABLE - Will skip betting analysis for this fight")
     odds_result["source"] = "UNAVAILABLE"
     odds_result["odds"] = {}
@@ -773,6 +868,7 @@ def main():
     logger.info("="*60)
     logger.info("PRIMARY: Betist (Turkish, Live)")
     logger.info("SECONDARY: BestFightOdds.com (Multi-sportsbook Aggregator)")
+    logger.info("TERTIARY: OddsPortal + The Odds API + Action Network")
     logger.info("CRITICAL RULE: NO SIMULATED ODDS EVER")
     logger.info("="*60)
     
