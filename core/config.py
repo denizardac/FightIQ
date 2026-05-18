@@ -91,6 +91,20 @@ LIVE_WIRE_MAX_RUNTIME_HOURS = 8    # --auto mode stops after this many hours
 SPOTLIGHT_HISTORY_DAYS = 90        # Days to look back for content history
 
 # ==========================================
+# TWITTER / X POSTING
+# ==========================================
+
+# Cookie/twikit pacing (reduces Twitter error 226 on VPS)
+TWITTER_PRE_POST_DELAY_SECONDS = int(os.environ.get("TWITTER_PRE_POST_DELAY_SECONDS", "25"))
+TWITTER_THREAD_DELAY_SECONDS = int(os.environ.get("TWITTER_THREAD_DELAY_SECONDS", "90"))
+TWITTER_POST_DELAY_SECONDS = int(os.environ.get("TWITTER_POST_DELAY_SECONDS", "60"))
+TWITTER_LIVE_CONTENT_DELAY_SECONDS = int(os.environ.get("TWITTER_LIVE_CONTENT_DELAY_SECONDS", "180"))
+TWITTER_DELAY_JITTER_SECONDS = int(os.environ.get("TWITTER_DELAY_JITTER_SECONDS", "20"))
+# twikit error 226 retries
+TWITTER_226_MAX_RETRIES = int(os.environ.get("TWITTER_226_MAX_RETRIES", "4"))
+TWITTER_226_BASE_DELAY = int(os.environ.get("TWITTER_226_BASE_DELAY", "120"))
+
+# ==========================================
 # CONTENT GENERATION (GOD MODE - Phase 3)
 # ==========================================
 

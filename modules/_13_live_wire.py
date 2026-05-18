@@ -257,9 +257,15 @@ def post_live_reaction(reaction_text):
     if not SocialDirector:
         print("⚠️ Social Director not available - cannot post")
         return None
-    if not os.path.exists(COOKIES_FILE):
-        print(f"⚠️ Twitter cookies missing: {COOKIES_FILE}")
-        return None
+    try:
+        from core.twitter_client import twitter_credentials_status
+        if not twitter_credentials_status()["ready"]:
+            print("⚠️ Twitter not configured — set X_API_* in .env or twitter_cookies.json")
+            return None
+    except ImportError:
+        if not os.path.exists(COOKIES_FILE):
+            print(f"⚠️ Twitter cookies missing: {COOKIES_FILE}")
+            return None
 
     try:
         director = SocialDirector.SocialDirector()

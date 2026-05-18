@@ -14,12 +14,16 @@ import json
 import os
 import sys
 
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _PROJECT_ROOT)
+
 from dotenv import load_dotenv
 
-load_dotenv()
+# Always load .env from project root (cron cwd may be /root)
+load_dotenv(os.path.join(_PROJECT_ROOT, ".env"))
 
-from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR
+from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR, PROJECT_ROOT
+from core.twitter_client import twitter_credentials_status
 
 
 def _load(name):
@@ -81,7 +85,6 @@ def check_card_coverage():
         if pair not in brain_pairs:
             issues["missing_ai_brain"].append(" vs ".join(pair))
 
-        # versus card filename pattern
         safe_f1 = "".join(c for c in fight.get("f1", "") if c.isalnum() or c == " ").replace(" ", "_")
         safe_f2 = "".join(c for c in fight.get("f2", "") if c.isalnum() or c == " ").replace(" ", "_")
         card_paths = [
@@ -95,18 +98,21 @@ def check_card_coverage():
 
 
 def check_live_wire_readiness():
-    """Preflight for fight-night Live Wire (scraping + Twitter cookies)."""
+    """Preflight for fight-night Live Wire (scraping + Twitter)."""
     from datetime import datetime, timedelta
 
     card = _load("1_card.json") or {}
-    cookies_path = get_data_path("twitter_cookies.json")
+    tw = twitter_credentials_status()
     report = {
         "fight_night_today": False,
         "event_url": card.get("url"),
-        "twitter_cookies": os.path.exists(cookies_path),
+        "twitter_official_api": tw["official_api"],
+        "twitter_cookies": tw["cookies"],
+        "twitter_backend": tw["backend"],
+        "twitter_ready": tw["ready"],
         "scrape_ok": False,
         "finished_fights": 0,
-        "gemini_key": bool(os.environ.get("GEMINI_API_KEY")),
+        "gemini_key": bool((os.getenv("GEMINI_API_KEY") or "").strip()),
     }
 
     date_str = card.get("date", "")
@@ -138,19 +144,32 @@ def main():
     lw = check_live_wire_readiness()
     if lw.get("fight_night_today"):
         print("   🔥 Fight night detected")
-    print(f"   {'✅' if lw.get('twitter_cookies') else '❌'} Twitter cookies")
+
+    backend = lw.get("twitter_backend", "none")
+    if backend == "official":
+        print("   ✅ Twitter: official API v2 (tweepy)")
+    elif backend == "cookies":
+        print("   ✅ Twitter: cookie/twikit (default)")
+    else:
+        print("   ❌ Twitter: no credentials (set X_API_* or twitter_cookies.json)")
+
+    if lw.get("twitter_cookies") and backend != "official":
+        print("   ✅ Twitter cookies file present")
     print(f"   {'✅' if lw.get('event_url') else '❌'} Event URL in 1_card.json")
     if lw.get("scrape_ok"):
         print(f"   ✅ Live Wire scrape: {lw.get('finished_fights', 0)} finished bout(s) on page")
     elif lw.get("scrape_error"):
         print(f"   ❌ Live Wire scrape failed: {lw['scrape_error']}")
     if not lw.get("gemini_key"):
-        print("   ⚠️  GEMINI_API_KEY not set in environment")
+        print("   ❌ GEMINI_API_KEY missing in .env")
+    else:
+        print("   ✅ GEMINI_API_KEY loaded from .env")
 
     issues = check_card_coverage()
     if issues.get("skipped"):
         print(f"   ℹ️  Skipped: {issues['reason']}")
-        return 0
+        print("=" * 60 + "\n")
+        return 0 if lw.get("gemini_key") and lw.get("twitter_ready") else 1
 
     total = issues["fights_total"]
     coverage = {
@@ -170,12 +189,10 @@ def main():
     else:
         print("   ✅ All fighter portraits cached")
 
-    # Verbose breakdown for anything missing
     for key in ("missing_deep_stats", "missing_odds", "missing_ai_brain", "missing_versus_cards"):
         if issues[key]:
             print(f"   📋 {key}: {issues[key]}")
 
-    # Save snapshot for Discord/alerts
     snapshot_path = get_data_path("healthcheck.json")
     try:
         with open(snapshot_path, "w") as f:
@@ -186,8 +203,9 @@ def main():
 
     print("=" * 60 + "\n")
 
-    # Severity exit code
     severity = sum(1 for k in ("missing_odds", "missing_ai_brain") if issues[k])
+    if not lw.get("gemini_key") or not lw.get("twitter_ready"):
+        severity += 1
     return severity
 
 

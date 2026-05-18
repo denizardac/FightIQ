@@ -1,11 +1,11 @@
 import json
 import os
 import time
-import asyncio
+import sys
+import random
+import argparse
 from datetime import datetime
 from dotenv import load_dotenv
-import sys
-import argparse
 
 # ==========================================
 # DRY-RUN MODE: use --dry-run to skip Twitter posts
@@ -18,14 +18,13 @@ DRY_RUN = _args.dry_run
 if DRY_RUN:
     print("[DRY-RUN MODE] Tweets will NOT be posted to Twitter.")
 
-# Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, VISUALS_DIR, PROJECT_ROOT
 from core.parlay_logic import combined_odds
+from core.twitter_client import TwitterClient
 import core.config as config
 
-load_dotenv()
-COOKIES_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "twitter_cookies.json")
+load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 
 FILES = {
     "card": get_data_path("1_card.json"),
@@ -33,54 +32,86 @@ FILES = {
     "parlays": get_data_path("4_parlays.json"),
     "history": get_data_path("posted_history.json"),
     "visuals": VISUALS_DIR,
-    "spotlight": get_data_path("spotlight_ready.json")
+    "spotlight": get_data_path("spotlight_ready.json"),
 }
+
 
 class SocialDirector:
     def __init__(self, dry_run=False):
         self.history = self.load_history()
         self.dry_run = dry_run
-        self._loop = asyncio.new_event_loop()
-        self._twitter = None
-
-        if dry_run:
-            print("[DRY-RUN] Twitter connection skipped.")
-            return
-
-        if not os.path.exists(COOKIES_FILE):
-            print(f"❌ Twitter cookies not found: {COOKIES_FILE}")
-            print("   Run setup: python3 tools/setup_twitter_cookies.py")
-            sys.exit(1)
-
+        self.post_failed = False
         try:
-            from twikit import Client
-            client = Client("en-US")
-            client.load_cookies(COOKIES_FILE)
-            self._twitter = client
-            print("✅ Twitter (twikit) cookies loaded.")
-        except Exception as e:
-            print(f"❌ Twitter init failed: {e}")
+            self.twitter = TwitterClient(dry_run=dry_run)
+        except RuntimeError as e:
+            print(f"❌ {e}")
             sys.exit(1)
 
     def load_history(self):
-        if not os.path.exists(FILES["history"]): return []
+        if not os.path.exists(FILES["history"]):
+            return []
         try:
-            with open(FILES["history"], "r") as f: return json.load(f)
-        except: return []
+            with open(FILES["history"], "r") as f:
+                raw = json.load(f)
+        except Exception:
+            return []
+        return self._sanitize_history(raw if isinstance(raw, list) else [])
+
+    def _sanitize_history(self, history):
+        """Drop legacy partial spotlight marks (saved before thread finished)."""
+        cleaned = []
+        removed = 0
+        for item in history:
+            if not isinstance(item, str):
+                continue
+            # Old bug: SPOTLIGHT_*_YYYY-MM-DD without _DONE blocked retries
+            if item.startswith("SPOTLIGHT_") and not item.endswith("_DONE"):
+                removed += 1
+                continue
+            cleaned.append(item)
+        if removed and not self.dry_run:
+            with open(FILES["history"], "w") as f:
+                json.dump(cleaned, f, indent=4)
+            print(f"   🧹 Cleared {removed} incomplete spotlight history entry(ies)")
+        return cleaned
+
+    def _done_id(self, uid):
+        return uid if uid.endswith("_DONE") else f"{uid}_DONE"
+
+    def _already_posted(self, uid):
+        return self._done_id(uid) in self.history
 
     def save_history(self, item_id):
         if self.dry_run:
             print(f"  [DRY-RUN] Would save to history: {item_id}")
             return
         self.history.append(item_id)
-        with open(FILES["history"], "w") as f: json.dump(self.history, f, indent=4)
+        with open(FILES["history"], "w") as f:
+            json.dump(self.history, f, indent=4)
+
+    def _sleep_between_posts(self, is_reply: bool = False):
+        if self.dry_run:
+            return
+        delay = self.twitter.thread_delay(is_reply=is_reply)
+        jitter = 0
+        if getattr(self.twitter, "backend", "") == "cookies":
+            jitter = random.randint(5, config.TWITTER_DELAY_JITTER_SECONDS)
+        total = delay + jitter
+        print(f"   ⏳ Waiting {total}s before next post...")
+        time.sleep(total)
+
+    def _warmup_before_session(self):
+        if self.dry_run:
+            return
+        wait = config.TWITTER_PRE_POST_DELAY_SECONDS
+        print(f"   ⏳ Pre-post warmup {wait}s (reduces error 226)...")
+        time.sleep(wait)
 
     def find_image(self, f1, f2, visual_type="Versus"):
-        safe_f1 = "".join([c for c in f1 if c.isalnum() or c == ' ']).replace(' ', '_')
-        safe_f2 = "".join([c for c in f2 if c.isalnum() or c == ' ']).replace(' ', '_')
+        safe_f1 = "".join([c for c in f1 if c.isalnum() or c == " "]).replace(" ", "_")
+        safe_f2 = "".join([c for c in f2 if c.isalnum() or c == " "]).replace(" ", "_")
 
         if visual_type == "Versus":
-            # Try both name orders
             for s1, s2 in [(safe_f1, safe_f2), (safe_f2, safe_f1)]:
                 p = os.path.join(FILES["visuals"], f"Versus_{s1}_vs_{s2}.png")
                 if os.path.exists(p):
@@ -101,116 +132,38 @@ class SocialDirector:
                     return p
             return None
 
-        # Generic fallback
         path = os.path.join(FILES["visuals"], f"{visual_type}_{safe_f1}_vs_{safe_f2}.png")
         return path if os.path.exists(path) else None
-    
+
     def find_video(self, f1, f2, video_type="Matchup"):
-        """Find matchup video in visuals directory"""
-        safe_f1 = "".join([c for c in f1 if c.isalnum() or c==' ']).replace(' ', '_').lower()
-        safe_f2 = "".join([c for c in f2 if c.isalnum() or c==' ']).replace(' ', '_').lower()
-        
-        # Try both name orders
+        safe_f1 = "".join([c for c in f1 if c.isalnum() or c == " "]).replace(" ", "_").lower()
+        safe_f2 = "".join([c for c in f2 if c.isalnum() or c == " "]).replace(" ", "_").lower()
         patterns = [
             f"Reel_{video_type}_{safe_f1}_vs_{safe_f2}.mp4",
-            f"Reel_{video_type}_{safe_f2}_vs_{safe_f1}.mp4"
+            f"Reel_{video_type}_{safe_f2}_vs_{safe_f1}.mp4",
         ]
-        
         for pattern in patterns:
             path = os.path.join(FILES["visuals"], pattern)
             if os.path.exists(path):
                 return path
         return None
-    
+
     def find_ticket(self, slip_type):
-        """Find betting ticket image"""
         target = f"Ticket_{slip_type.capitalize()}.png"
         path = os.path.join(FILES["visuals"], target)
         return path if os.path.exists(path) else None
 
-    def _post_via_twikit(self, text, media_path=None, reply_to_id=None):
-        """Post tweet via twikit using low-level GraphQL call to avoid parse bugs."""
-        async def _async_post():
-            media_ids = []
-            if media_path and os.path.exists(str(media_path)):
-                print(f"   🖼️ Uploading: {os.path.basename(str(media_path))}")
-                try:
-                    media_id_result = await self._twitter.upload_media(str(media_path))
-                    print(f"   📦 upload_media returned: {type(media_id_result).__name__} = {media_id_result!r}")
-                    if hasattr(media_id_result, 'media_id'):
-                        media_ids = [media_id_result.media_id]
-                    elif isinstance(media_id_result, str):
-                        media_ids = [media_id_result]
-                    elif isinstance(media_id_result, int):
-                        media_ids = [str(media_id_result)]
-                    else:
-                        print(f"   ⚠️ Unknown media result type, skipping image")
-                except Exception as e:
-                    print(f"   ⚠️ Media upload failed: {type(e).__name__}: {e}")
-
-            reply_to_param = None
-            if reply_to_id and str(reply_to_id).isdigit():
-                reply_to_param = str(reply_to_id)
-
-            media_entities = [
-                {'media_id': mid, 'tagged_users': []}
-                for mid in media_ids
-            ]
-
-            response, _ = await self._twitter.gql.create_tweet(
-                False,            # is_note_tweet
-                text,             # text
-                media_entities,   # media_entities
-                None,             # poll_uri
-                reply_to_param,   # reply_to
-                None,             # attachment_url
-                None,             # community_id
-                False,            # share_with_followers
-                None,             # richtext_options
-                None,             # edit_tweet_id
-                None              # limit_mode
-            )
-
-            if isinstance(response, dict) and response.get('errors'):
-                raise Exception(f"Twitter API errors: {response['errors']}")
-
-            try:
-                return response['data']['create_tweet']['tweet_results']['result']['rest_id']
-            except (KeyError, TypeError):
-                print(f"   ⚠️ Unexpected response shape: {json.dumps(response)[:500]}")
-                return None
-
-        try:
-            tweet_id = self._loop.run_until_complete(_async_post())
-            if not tweet_id:
-                print("   ❌ Post returned no tweet id — treating as failure (no history insert).")
-                return None
-            print(f"   ✅ Posted! ID: {tweet_id}")
-            return str(tweet_id)
-        except Exception as e:
-            print(f"   ❌ twikit error: {e}")
-            return None
-
     def post_tweet(self, text, media_path=None, reply_to_id=None, poll_options=None, poll_duration_minutes=None):
-        if self.dry_run:
-            print(f"\n[DRY-RUN] TWEET PREVIEW (reply_to={reply_to_id}):")
-            print(f"  TEXT: {text[:120]}")
-            if media_path:
-                print(f"  MEDIA: {media_path} (exists={os.path.exists(str(media_path))})")
-            if poll_options:
-                print(f"  POLL: {poll_options}")
-            print(f"  -> Skipped (dry-run)")
-            return "DRY_RUN_FAKE_ID"
+        if poll_options:
+            print("   ⚠️ Polls not supported — posting text only")
 
         print(f"\n🐦 POSTING (Reply: {reply_to_id}):\n{text[:60]}...")
-        if poll_options:
-            print("   ⚠️ Polls not supported in cookie mode — posting text only")
+        tweet_id = self.twitter.post(text, media_path=media_path, reply_to_id=reply_to_id)
+        if not tweet_id:
+            self.post_failed = True
+        return tweet_id
 
-        return self._post_via_twikit(text, media_path=media_path, reply_to_id=reply_to_id)
-
-    # --- IDLE MODU (GÜNCELLENDİ: THREAD DESTEĞİ) ---
     def _resolve_media_path(self, media_file):
-        """Resolve spotlight / parlay image path (VPS-safe)."""
         if not media_file:
             return None
         if os.path.isabs(media_file) and os.path.exists(media_file):
@@ -227,14 +180,15 @@ class SocialDirector:
 
     def post_spotlight_file(self):
         if not os.path.exists(FILES["spotlight"]):
-            return
+            return True
         try:
             with open(FILES["spotlight"], "r") as f:
                 data = json.load(f)
             uid = f"SPOTLIGHT_{data['fighter']}_{datetime.today().strftime('%Y-%m-%d')}"
 
-            if uid in self.history:
-                return
+            if self._already_posted(uid):
+                print(f"   ⏭️ Already posted today (complete): {self._done_id(uid)}")
+                return True
 
             thread_texts = [t.strip() for t in data.get("thread", []) if t and t.strip()]
             if not thread_texts and data.get("tweet"):
@@ -243,35 +197,42 @@ class SocialDirector:
             media_file = self._resolve_media_path(data.get("visual_path"))
             if not media_file:
                 print(f"❌ Spotlight image missing: {data.get('visual_path')}")
-                return
+                self.post_failed = True
+                return False
 
             print(f"🚀 Posting Spotlight ({len(thread_texts)} tweets) + {os.path.basename(media_file)}")
+            self._warmup_before_session()
 
             last_id = self.post_tweet(thread_texts[0], media_path=media_file)
+            if not last_id:
+                return False
 
-            if last_id:
-                self.save_history(uid)
-                for txt in thread_texts[1:]:
-                    if not self.dry_run:
-                        time.sleep(5)
-                    reply_id = self.post_tweet(txt, reply_to_id=last_id)
-                    if reply_id:
-                        last_id = reply_id
+            for txt in thread_texts[1:]:
+                self._sleep_between_posts(is_reply=True)
+                reply_id = self.post_tweet(txt, reply_to_id=last_id)
+                if not reply_id:
+                    print("   ⚠️ Thread incomplete — not saving to history (retry tomorrow)")
+                    return False
+                last_id = reply_id
+
+            self.save_history(self._done_id(uid))
+            return True
 
         except Exception as e:
             print(f"❌ Spotlight Error: {e}")
+            self.post_failed = True
+            return False
 
-    # --- DİĞER FONKSİYONLAR (AYNI KALACAK) ---
     def post_parlays(self):
-        """Post parlay slips as a thread with ticket images."""
         try:
             with open(FILES["parlays"], "r") as f:
                 parlays = json.load(f)
         except Exception:
-            return
+            return True
+
         uid = f"PARLAY_{datetime.today().strftime('%Y_%W')}"
-        if uid in self.history:
-            return
+        if self._already_posted(uid):
+            return True
 
         def build_slip_caption(slip_type, slip_data):
             max_legs = config.PARLAY_MAX_LEGS
@@ -293,8 +254,7 @@ class SocialDirector:
             body = "\n".join(lines)
             parlay_line = f"\n🔗 {len(picks)}-leg @ {total}" if len(picks) > 1 and total > 1 else ""
             tag = "#UFC #Betting #FightIQ"
-            full = f"{intro}{body}{parlay_line}\n{tag}"
-            return full[:278]
+            return f"{intro}{body}{parlay_line}\n{tag}"[:278]
 
         slip_configs = [
             ("safe_slip", "safe"),
@@ -316,7 +276,7 @@ class SocialDirector:
 
         if not available:
             print("   ⚠️ No parlay slips with images to post.")
-            return
+            return True
 
         names = {"safe": "Safe", "violence": "Violence", "value": "Edge"}
         if len(available) == 1:
@@ -332,63 +292,65 @@ class SocialDirector:
                 f"{labels}. Full cards below. 🧵\n#UFC #Betting"
             )
 
+        self._warmup_before_session()
         last_id = self.post_tweet(lead)
         if not last_id:
-            return
+            return False
 
-        self.save_history(uid)
-        if not self.dry_run:
-            time.sleep(5)
+        self._sleep_between_posts(is_reply=False)
 
         for slip_key, slip_type, slip_data, ticket_img in available:
             caption = build_slip_caption(slip_type, slip_data)
             tweet_id = self.post_tweet(caption, media_path=ticket_img, reply_to_id=last_id)
-            if tweet_id:
-                last_id = tweet_id
-                if not self.dry_run:
-                    time.sleep(5)
+            if not tweet_id:
+                print("   ⚠️ Parlay thread incomplete — not saving to history")
+                return False
+            last_id = tweet_id
+            self._sleep_between_posts(is_reply=True)
+
+        self.save_history(self._done_id(uid))
+        return True
 
     def post_live_content(self, t_type, v_type, limit):
-        """Post live fight week content. Always uses Versus cards for matchup visuals."""
         try:
             with open(FILES["results"], "r") as f:
                 results = json.load(f)
         except Exception:
-            return
+            return True
+
         count = 0
         for item in results:
             if count >= limit:
                 break
-            match = item['matchup']
+            match = item["matchup"]
             uid = f"{match}_{t_type}"
-            if uid in self.history:
+            if self._already_posted(uid):
                 continue
-            brain = item.get('fight_brain_output', {})
+            brain = item.get("fight_brain_output", {})
             if t_type == "spotlight":
-                text = brain.get('spotlight_content', '')
+                text = brain.get("spotlight_content", "")
             else:
-                text = brain.get('content_tweets', {}).get(t_type, '')
+                text = brain.get("content_tweets", {}).get(t_type, "")
             if not text:
                 continue
             f1, f2 = match.split(" vs ")
+            media = self.find_image(f1, f2, "Versus") or self.find_image(f1, f2, "Card")
 
-            # Always prefer Versus card; fall back to stat card, then radar
-            media = (
-                self.find_image(f1, f2, "Versus")
-                or self.find_image(f1, f2, "Card")
-            )
-
+            if count == 0:
+                self._warmup_before_session()
             if self.post_tweet(text, media):
-                self.save_history(uid)
+                self.save_history(self._done_id(uid))
                 count += 1
                 if not self.dry_run:
-                    time.sleep(180)
+                    time.sleep(config.TWITTER_LIVE_CONTENT_DELAY_SECONDS)
+            else:
+                return False
+        return True
 
     def _kickoff_tweet(self, event_name):
-        """Monday: hype tweet with the main event Versus card attached."""
         uid = f"KICK_{datetime.today().strftime('%Y_%W')}"
-        if uid in self.history:
-            return
+        if self._already_posted(uid):
+            return True
         try:
             with open(FILES["results"], "r") as f:
                 results = json.load(f)
@@ -399,7 +361,7 @@ class SocialDirector:
         fight_line = ""
         versus_card = None
         if main_event:
-            matchup = main_event.get('matchup', '')
+            matchup = main_event.get("matchup", "")
             fight_line = f"\n\n🥊 MAIN EVENT: {matchup}"
             try:
                 f1, f2 = matchup.split(" vs ")
@@ -413,44 +375,48 @@ class SocialDirector:
             f"Full AI breakdown drops all week.\n"
             f"#UFC #MMA #FightIQ"
         )
-        self.post_tweet(tweet, media_path=versus_card)
-        self.save_history(uid)
+        self._warmup_before_session()
+        if not self.post_tweet(tweet, media_path=versus_card):
+            return False
+        self.save_history(self._done_id(uid))
+        return True
 
-    def run_agenda(self):
+    def run_agenda(self) -> bool:
         try:
             with open(FILES["card"]) as f:
                 c = json.load(f)
                 status = c.get("status", "IDLE")
-                ename  = c.get("event", "UFC")
+                ename = c.get("event", "UFC")
         except Exception:
             status = "IDLE"
-            ename  = "UFC"
+            ename = "UFC"
 
         day = datetime.today().weekday()
         print(f"📅 Agenda: {status} | Day: {day}")
 
+        ok = True
         if status == "LIVE":
             if day == 0:
-                # Monday — Fight Week kickoff + main event versus card
-                self._kickoff_tweet(ename)
+                ok = self._kickoff_tweet(ename)
             elif day == 1:
-                # Tuesday — Deep Dive analysis tweets + Versus cards
-                self.post_live_content("analysis_tweet", "Versus", 3)
+                ok = self.post_live_content("analysis_tweet", "Versus", 3)
             elif day == 2:
-                # Wednesday — Fighter Spotlight (stat card)
-                self.post_live_content("spotlight", "Card", 2)
+                ok = self.post_live_content("spotlight", "Card", 2)
             elif day == 3:
-                # Thursday — Violence tweets + Versus cards
-                self.post_live_content("violence_tweet", "Versus", 3)
+                ok = self.post_live_content("violence_tweet", "Versus", 3)
             elif day == 4:
-                # Friday — Parlay slips with ticket visuals
-                self.post_parlays()
+                ok = self.post_parlays()
             elif day == 5:
-                # Saturday — Betting angles + Versus cards (all remaining fights)
-                self.post_live_content("betting_tweet", "Versus", 15)
+                ok = self.post_live_content("betting_tweet", "Versus", 15)
         else:
-            # IDLE mode — spotlight engine content
-            self.post_spotlight_file()
+            ok = self.post_spotlight_file()
+
+        if self.post_failed or not ok:
+            print("❌ Social Director finished with posting failures.")
+            return False
+        return True
+
 
 if __name__ == "__main__":
-    SocialDirector(dry_run=DRY_RUN).run_agenda()
+    success = SocialDirector(dry_run=DRY_RUN).run_agenda()
+    sys.exit(0 if success else 1)
