@@ -38,9 +38,9 @@ FILES = {
 
 class SocialDirector:
     def __init__(self, dry_run=False):
-        self.history = self.load_history()
         self.dry_run = dry_run
         self.post_failed = False
+        self.history = self.load_history()
         try:
             self.twitter = TwitterClient(dry_run=dry_run)
         except RuntimeError as e:
