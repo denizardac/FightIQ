@@ -142,8 +142,11 @@ def scrape_fighter_detailed(url):
         # Stats
         data['slpm'] = "0.00"
         data['str_acc'] = "0%"
+        data['str_def'] = "0%"
         data['td_avg'] = "0.00"
         data['sub_avg'] = "0.0"
+        data['stance'] = None
+        data['nickname'] = ""
         
         # TALE OF THE TAPE: Height, Reach, Weight, DOB
         data['height'] = None
@@ -157,8 +160,11 @@ def scrape_fighter_detailed(url):
             text = " ".join(item.text.split())
             if "SLpM:" in text: data['slpm'] = text.split("SLpM:")[1].strip()
             if "Str. Acc.:" in text: data['str_acc'] = text.split("Str. Acc.:")[1].strip()
+            if "Str. Def.:" in text: data['str_def'] = text.split("Str. Def.:")[1].strip()
             if "TD Avg.:" in text: data['td_avg'] = text.split("TD Avg.:")[1].strip()
             if "Sub. Avg.:" in text: data['sub_avg'] = text.split("Sub. Avg.:")[1].strip()
+            if "STANCE:" in text.upper():
+                data['stance'] = text.split(":", 1)[-1].strip()
             
             # Tale of the Tape
             if "Height:" in text: data['height'] = text.split("Height:")[1].strip()
@@ -179,6 +185,10 @@ def scrape_fighter_detailed(url):
                         data['age'] = age
                 except:
                     pass
+
+        nick_tag = soup.find('p', class_='b-content__Nickname')
+        if nick_tag:
+            data['nickname'] = nick_tag.get_text(strip=True)
 
         # Weight Class (derived from weight + gender detection)
         if data['weight']:
@@ -262,6 +272,42 @@ def scrape_fighter_detailed(url):
 
         return data
     except: return None
+
+
+def scraped_to_official_row(scraped):
+    """Map spotlight scrape fields → Versus card UFC OFFICIAL strip keys."""
+    if not scraped:
+        return {}
+    return {
+        "SLpM": scraped.get("slpm") or "N/A",
+        "Str_Acc": scraped.get("str_acc") or "N/A",
+        "Str_Def": scraped.get("str_def") or "N/A",
+        "TD_Avg": scraped.get("td_avg") or "N/A",
+        "Sub_Avg": scraped.get("sub_avg") or "N/A",
+    }
+
+
+def prepare_versus_fighter_display(scraped, ai_side_stats=None):
+    """Same tape/nickname fields as fight-week Versus cards."""
+    ai_side_stats = ai_side_stats or {}
+    nickname_page = (scraped.get("nickname") or "").strip()
+    ol = (ai_side_stats.get("one_liner") or nickname_page or "").strip()
+    if ol.upper() in ("FANTASY WAR", "N/A"):
+        ol = nickname_page
+    stance = scraped.get("stance") or "--"
+    if stance and isinstance(stance, str):
+        stance = stance.strip().title() if stance.strip() else "--"
+    return {
+        "name": scraped.get("name", "Unknown"),
+        "record": scraped.get("record", "N/A"),
+        "weight_class": scraped.get("weight_class", ""),
+        "height": scraped.get("height") or "--",
+        "reach": scraped.get("reach") or "--",
+        "stance": stance,
+        "age": scraped.get("age", "--"),
+        "one_liner": ol,
+    }
+
 
 def parse_json_content(text):
     """Parses JSON from AI response, handling markdown blocks and list wrapping."""
@@ -353,8 +399,8 @@ def generate_oracle_content(fighter1, fighter2):
         "main_tweet": "🔮 THE EXARCHIA HAS SPOKEN. Fantasy Matchup: {fighter1['name']} vs {fighter2['name']}. Who takes it? #FightIQ",
         "stat_reply": "Prediction: [Winner] via [Method]. Reason: [1 sentence analysis].",
         "card_stats": {{
-            "fighter1": {{ "power": "Est(0-100)", "grappling": "Est(0-100)", "stamina": "Est(0-100)", "chin": "Est(0-100)", "technique": "Est(0-100)" }},
-            "fighter2": {{ "power": "Est(0-100)", "grappling": "Est(0-100)", "stamina": "Est(0-100)", "chin": "Est(0-100)", "technique": "Est(0-100)" }},
+            "fighter1": {{ "power": 75, "grappling": 75, "stamina": 75, "chin": 75, "technique": 75, "one_liner": "3-5 word fighter tag e.g. Pressure Wrestler" }},
+            "fighter2": {{ "power": 75, "grappling": 75, "stamina": 75, "chin": 75, "technique": 75, "one_liner": "3-5 word fighter tag" }},
             "one_liner": "FANTASY WAR"
         }},
         "video_script": "12-second script, max 35 words. 'In this corner... The Oracle predicts...' Build tension."
@@ -903,12 +949,19 @@ def main():
 
     # 5. GENERATE ASSETS
     if mode == "ORACLE" and isinstance(selected_data, dict) and 'fighter1' in selected_data:
-        # ORACLE MODE: Generate Versus Card
-        print(f"   � Creating Versus Card: {selected_data['fighter1']['name']} vs {selected_data['fighter2']['name']}...")
+        # ORACLE MODE: Versus card — fight-week layout (nicknames, stance, UFC official strip)
+        d1_raw = selected_data["fighter1"]
+        d2_raw = selected_data["fighter2"]
+        cs = ai_content.get("card_stats") or {}
+        f1_display = prepare_versus_fighter_display(d1_raw, cs.get("fighter1"))
+        f2_display = prepare_versus_fighter_display(d2_raw, cs.get("fighter2"))
+        official_pair = (scraped_to_official_row(d1_raw), scraped_to_official_row(d2_raw))
+        print(f"   Creating Versus Card: {f1_display['name']} vs {f2_display['name']}...")
         VisualEngine.create_versus_card(
-            selected_data['fighter1'],
-            selected_data['fighter2'],
-            ai_content['card_stats']
+            f1_display,
+            f2_display,
+            cs,
+            official_pair,
         )
     else:
         # STANDARD/OTHER MODES: Single Fighter Card
