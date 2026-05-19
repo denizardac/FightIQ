@@ -103,6 +103,8 @@ class SocialDirector:
     def _warmup_before_session(self):
         if self.dry_run:
             return
+        if getattr(self.twitter, "backend", "") == "official":
+            return
         wait = config.TWITTER_PRE_POST_DELAY_SECONDS
         print(f"   ⏳ Pre-post warmup {wait}s (reduces error 226)...")
         time.sleep(wait)

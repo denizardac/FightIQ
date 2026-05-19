@@ -1,8 +1,8 @@
 """
-Twitter / X posting — cookie/twikit by default (free). Official tweepy API is opt-in.
+Twitter / X posting — official API v2 (tweepy) preferred, twikit cookies as fallback.
 
-Default: data/twitter_cookies.json via twikit (TWITTER_BACKEND=cookies).
-Opt-in paid API: set TWITTER_BACKEND=official and X_API_* keys in .env.
+Default (TWITTER_BACKEND=auto): X_API_* keys → official API; else twitter_cookies.json.
+Set TWITTER_BACKEND=cookies to force free cookie mode; official to force API only.
 """
 from __future__ import annotations
 
@@ -54,14 +54,17 @@ def twitter_credentials_status() -> dict:
 
 
 def resolve_backend() -> str:
-    # Default: cookies (free). Official API only when explicitly requested.
-    forced = (_env("TWITTER_BACKEND") or "cookies").lower()
+    # Default: auto — official API when X_API_* keys exist, else cookies.
+    forced = (_env("TWITTER_BACKEND") or "auto").lower()
     if forced == "official":
         return "official" if has_official_api_credentials() else "none"
-    if has_cookie_auth():
-        return "cookies"
-    if forced == "auto" and has_official_api_credentials():
-        return "official"
+    if forced == "cookies":
+        return "cookies" if has_cookie_auth() else "none"
+    if forced == "auto":
+        if has_official_api_credentials():
+            return "official"
+        if has_cookie_auth():
+            return "cookies"
     return "none"
 
 
@@ -127,6 +130,8 @@ class TwitterClient:
         self._twikit = client
 
     def thread_delay(self, is_reply: bool) -> int:
+        if self.backend == "official":
+            return 2 if is_reply else 1
         if is_reply:
             return config.TWITTER_THREAD_DELAY_SECONDS
         return config.TWITTER_POST_DELAY_SECONDS
