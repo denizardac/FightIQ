@@ -17,12 +17,18 @@ import sys
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, _PROJECT_ROOT)
 
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 from dotenv import load_dotenv
 
 # Always load .env from project root (cron cwd may be /root)
 load_dotenv(os.path.join(_PROJECT_ROOT, ".env"))
 
 from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR, PROJECT_ROOT
+from core.naming import versus_basename
 from core.twitter_client import twitter_credentials_status
 
 
@@ -85,11 +91,9 @@ def check_card_coverage():
         if pair not in brain_pairs:
             issues["missing_ai_brain"].append(" vs ".join(pair))
 
-        safe_f1 = "".join(c for c in fight.get("f1", "") if c.isalnum() or c == " ").replace(" ", "_")
-        safe_f2 = "".join(c for c in fight.get("f2", "") if c.isalnum() or c == " ").replace(" ", "_")
         card_paths = [
-            os.path.join(VISUALS_DIR, f"Versus_{safe_f1}_vs_{safe_f2}.png"),
-            os.path.join(VISUALS_DIR, f"Versus_{safe_f2}_vs_{safe_f1}.png"),
+            os.path.join(VISUALS_DIR, versus_basename(fight.get("f1", ""), fight.get("f2", ""))),
+            os.path.join(VISUALS_DIR, versus_basename(fight.get("f2", ""), fight.get("f1", ""))),
         ]
         if not any(os.path.exists(p) for p in card_paths):
             issues["missing_versus_cards"].append(f"{fight.get('f1')} vs {fight.get('f2')}")

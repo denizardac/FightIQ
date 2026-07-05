@@ -18,6 +18,7 @@ urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path
+from core.pipeline_meta import stamp_stage
 from core.odds_converter import normalize_odds  # P0 FINAL: Universal Format
 try:
     import core.config as config
@@ -33,8 +34,8 @@ except ImportError:
 INPUT_FILE = get_data_path("2_data.json")
 OUTPUT_FILE = get_data_path("2_data_with_odds.json")
 
-# Betist configuration (Primary Source)
-BETIST_REDIRECT_URL = "https://cutt.ly/zrIT6E9d"
+# Betist configuration (Primary Source) — env/config override supported
+BETIST_REDIRECT_URL = getattr(config, "BETIST_REDIRECT_URL", "https://cutt.ly/zrIT6E9d")
 
 # BestFightOdds configuration (Secondary Source - FALLBACK)
 BESTFIGHTODDS_BASE = "https://www.bestfightodds.com"
@@ -50,7 +51,8 @@ if not logger.handlers:
 # Windows console UTF-8
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except: pass
+except Exception:
+    pass
 
 
 # ==========================================
@@ -347,7 +349,7 @@ class BestFightOddsEngine:
                             href = event_link.get('href')
                             if href:
                                 current_event_url = BESTFIGHTODDS_BASE + href if href.startswith('/') else href
-                except:
+                except Exception:
                     pass # Ignore header errors, we want the ODDS
                 
                 rows = table.find_all('tr')
@@ -507,10 +509,6 @@ class BestFightOddsEngine:
         except Exception as e:
             logger.warning(f"Failed to scrape line movement: {e}")
             
-    def _unused_legacy_scraper(self):
-        # Placeholder to ensure indentation alignment if needed
-        pass
-
     def fetch_event_detail_page(self, event_url):
         """
         Fetch specific event detail page for prop bets.
@@ -879,7 +877,7 @@ def main():
         logger.info(f"Loaded {len(fights_data)} fights from {INPUT_FILE}")
     except Exception as e:
         logger.critical(f"Failed to load input file: {e}")
-        return
+        return 1
     
     # Initialize PRIMARY source (Betist)
     betist = BetistEngine()
@@ -912,9 +910,10 @@ def main():
         # Save input as output to allow pipeline to continue
         with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
             json.dump(fights_data, f, indent=2, ensure_ascii=False)
-        
+        stamp_stage("2_data_with_odds")
+
         logger.warning("Pipeline will continue but betting analysis will be incomplete")
-        return
+        return 1
     
     # Process each fight with dual-source logic
     logger.info("="*60)
@@ -958,6 +957,7 @@ def main():
     # Save enriched data
     with open(OUTPUT_FILE, 'w', encoding='utf-8') as f:
         json.dump(enriched_data, f, indent=2, ensure_ascii=False)
+    stamp_stage("2_data_with_odds")
     
     logger.info("="*60)
     logger.info("ODDS ENRICHMENT COMPLETE")

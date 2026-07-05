@@ -6,6 +6,7 @@ import sys
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import core.config as config
 from core.paths import get_data_path
+from core.pipeline_meta import stamp_stage
 from core.odds_converter import american_to_decimal
 from core.odds_resolve import resolve_pick_odds
 from core.parlay_logic import (
@@ -307,7 +308,7 @@ def main():
             results = json.load(f)
     except Exception:
         print(f"❌ '{INPUT_FILE}' not found or invalid JSON. Run step 5 first.")
-        return
+        sys.exit(1)
 
     markets_by = _load_markets_by_matchup()
     rows = []
@@ -369,6 +370,7 @@ def main():
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(parlays, f, indent=4)
+    stamp_stage("4_parlays")
 
     print(f"\n📁 Coupons saved to '{OUTPUT_FILE}'")
 

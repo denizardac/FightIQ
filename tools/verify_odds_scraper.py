@@ -102,7 +102,7 @@ def verify_bestfightodds():
                         print(f"    American: {odds2['american']}")
                         
                         matchups_shown += 1
-                    except:
+                    except Exception:
                         print(f"  (Odds extraction failed for this fight)")
                 else:
                     print(f"  (No clear odds found - may need to click through)")

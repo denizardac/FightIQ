@@ -34,7 +34,7 @@ BG_CACHE_DIR = os.path.join(ASSETS_DIR, "ticket_backgrounds")
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except:
+except Exception:
     pass
 
 # Initialize (.env next to project root — cwd-independent)
@@ -558,7 +558,7 @@ def main():
     try:
         with open(INPUT_FILE, "r") as f:
             parlays = json.load(f)
-    except:
+    except Exception:
         print(f"❌ '{INPUT_FILE}' not found.")
         return
     

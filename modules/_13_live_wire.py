@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import datetime, timedelta
@@ -16,6 +17,7 @@ from google import genai
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, PROJECT_ROOT
+from core.ufcstats_http import fetch as ufcstats_fetch
 
 try:
     from modules import _08_social_director as SocialDirector
@@ -117,7 +119,7 @@ def _event_url_from_card(card):
 def _event_url_from_completed(expected_event=""):
     """Fallback: newest completed UFCStats event."""
     try:
-        response = requests.get(UFC_STATS_COMPLETED, headers=REQUEST_HEADERS, timeout=15)
+        response = ufcstats_fetch(UFC_STATS_COMPLETED, headers=REQUEST_HEADERS)
         soup = BeautifulSoup(response.text, "html.parser")
         for row in soup.find_all("tr", class_="b-statistics__table-row"):
             link = row.find("a", class_="b-link") or row.find("a")
@@ -146,7 +148,10 @@ def _parse_fight_row(row):
 
     flag_col = cols[0]
     flag_text = flag_col.get_text(" ", strip=True).lower()
-    has_win = bool(flag_col.find("b-flag_style_green")) or flag_text == "win"
+    # Old code searched for a TAG named 'b-flag_style_green' (always None) —
+    # the green flag is a class on an <i>/<a> element.
+    green_flag = flag_col.find(class_=re.compile(r"b-flag_style_green"))
+    has_win = bool(green_flag) or flag_text == "win"
     if not has_win:
         return None  # Fight not finished yet
 
@@ -183,7 +188,7 @@ def get_live_results():
         return []
 
     try:
-        response = requests.get(event_url, headers=REQUEST_HEADERS, timeout=15)
+        response = ufcstats_fetch(event_url, headers=REQUEST_HEADERS)
         if response.status_code != 200:
             print(f"   ⚠️ Event page HTTP {response.status_code}")
             return []
@@ -375,9 +380,22 @@ def run_live_wire_continuous():
             time.sleep(POLL_INTERVAL)
     except KeyboardInterrupt:
         print("\n\n✅ Live Wire stopped by user.")
+        _post_scorecard_recap()
         return
 
     print(f"\n✅ Live Wire finished after {MAX_RUNTIME_HOURS}h window.")
+    # End of night: score our predictions vs actual results and post a recap.
+    _post_scorecard_recap()
+
+
+def _post_scorecard_recap():
+    """Generate + post the prediction-accuracy recap once the card is done."""
+    try:
+        from modules import _14_scorecard as Scorecard
+        print("\n📊 Building end-of-night scorecard...")
+        Scorecard.generate_scorecard(post=True)
+    except Exception as e:
+        print(f"   ⚠️ Scorecard recap failed (non-fatal): {type(e).__name__}: {str(e)[:80]}")
 
 
 def main():
@@ -385,9 +403,14 @@ def main():
     parser.add_argument("--auto", action="store_true", help="Continuous monitoring (fight night)")
     parser.add_argument("--once", action="store_true", help="Single poll (test / manual)")
     parser.add_argument("--force", action="store_true", help="Run even if not fight night (test)")
+    parser.add_argument("--scorecard", action="store_true", help="Build + post the accuracy recap and exit")
     args = parser.parse_args()
 
     print("--- 🔥 LIVE WIRE SYSTEM ---")
+
+    if args.scorecard:
+        _post_scorecard_recap()
+        return
 
     if args.once or (not args.auto and not args.force):
         if not args.force and not is_fight_night():

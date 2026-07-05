@@ -1,36 +1,37 @@
-# FightIQ — Python Dependencies
+# FightIQ — Python Dependencies (pinned for reproducible deploys)
 # Install: pip install -r requirements.txt
 
 # Core HTTP + Scraping
-requests
-beautifulsoup4
-fake-useragent
+requests==2.32.5
+beautifulsoup4==4.14.3
+fake-useragent==2.2.0
 
 # Google AI (use google-genai, NOT the deprecated google-generativeai)
-google-genai>=1.0.0
+google-genai==1.59.0
 
 # Environment & Config
-python-dotenv
+python-dotenv==1.2.1
 
 # Twitter / X API
-tweepy
-# Cookie-based posting (current production path). Patched fork that survives
-# Twitter's 2026-03 client-transaction JS change.
-twikit @ git+https://github.com/Amber-bisht/twikit.git
-lxml
+tweepy==4.16.0
+# Cookie-based posting (fallback path). Patched fork that survives
+# Twitter's 2026-03 client-transaction JS change — pinned to a known commit
+# so an upstream force-push can't break deploys.
+twikit @ git+https://github.com/Amber-bisht/twikit.git@383796bbf65a5dfdc5855355427d203a123ef7e2
+lxml>=5.0
 
 # Visualization
-matplotlib
-numpy
-pillow
+matplotlib==3.10.8
+numpy==2.4.1
+pillow==11.3.0
 
 # Video + Audio
-edge-tts
-moviepy
+edge-tts==7.2.7
+moviepy==1.0.3
 
 # Resilience
-tenacity
+tenacity==9.1.2
 
 # OddsPortal decrypt + optional TLS impersonation
-cryptography
-curl_cffi
+cryptography>=42.0
+curl_cffi>=0.7

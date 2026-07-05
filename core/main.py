@@ -7,6 +7,13 @@ import logging
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
+# Windows console UTF-8 — module output (emoji) is now re-printed through
+# Python, which crashes on cp1252 consoles without this.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 # ==========================================
 # 🥊 FIGHTIQ: SYSTEM ORCHESTRATOR V2.2
 # Sequential data pipeline + Structured Logging + Discord Alerts
@@ -85,12 +92,24 @@ def run_module(script_name):
         return False
     
     start = time.time()
-    # Run from project root for relative path compatibility
-    result = subprocess.run(
-        [sys.executable, module_path], 
-        capture_output=False,
-        cwd=PROJECT_ROOT
+    # Run from project root for relative path compatibility.
+    # Stream child output line-by-line so module logs also land in
+    # fightiq.log (previously only the console/cron.log saw them).
+    process = subprocess.Popen(
+        [sys.executable, module_path],
+        cwd=PROJECT_ROOT,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
+    for line in process.stdout:
+        line = line.rstrip()
+        if line:
+            logger.info(f"[{script_name}] {line}")
+    process.wait()
+    result = process
     duration = round(time.time() - start, 2)
     
     if result.returncode == 0:
@@ -214,7 +233,20 @@ def main():
     status = check_status()
     logger.info(f"DECISION MATRIX: System Mode is [{status}]")
     PIPELINE_REPORT["mode"] = status
-    
+
+    # Radar explicitly failed (network/markup) — do NOT continue with a
+    # stale or empty card. Alert and stop.
+    if status == "ERROR":
+        logger.critical("Event Radar reported ERROR status - aborting pipeline")
+        if send_discord_alert:
+            send_discord_alert(
+                "**Event Radar FAILED** — 1_card.json has status ERROR.\n"
+                "Pipeline aborted to avoid posting stale content.",
+                status="ERROR",
+            )
+        save_pipeline_report()
+        return
+
     # 3. SCENARIO A: FIGHT WEEK (LIVE)
     if status == "LIVE":
         logger.info("MODE: WAR ROOM (Full Fight Week Analysis)")
@@ -291,7 +323,7 @@ def main():
     
     # ── LIVE WIRE ─────────────────────────────────────────────
     # Managed exclusively via cron (deploy.sh --setup-cron):
-    #   Sat 20:00 UTC + Sun 20:00 UTC
+    #   Sat 18:00 UTC + Sun 18:00 UTC
     # Do NOT spawn from here — would create duplicate processes
     # when both cron and daily pipeline run on fight night.
 
@@ -301,6 +333,12 @@ def main():
         from tools.healthcheck import main as healthcheck_main
         severity = healthcheck_main()
         PIPELINE_REPORT["healthcheck_severity"] = severity
+        if severity >= 2 and send_discord_alert:
+            send_discord_alert(
+                f"**Healthcheck found critical gaps** (severity {severity}).\n"
+                "Check data/healthcheck.json — odds/AI coverage or credentials missing.",
+                status="ERROR",
+            )
     except Exception as e:
         logger.warning(f"Healthcheck failed (non-fatal): {e}")
 

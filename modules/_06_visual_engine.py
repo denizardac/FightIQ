@@ -14,6 +14,8 @@ from io import BytesIO
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR, PROJECT_ROOT
+from core.naming import safe_filename, card_basename, radar_basename, versus_basename
+from core.ufcstats_http import fetch as ufcstats_fetch
 try:
     from core import config
 except ImportError:
@@ -48,7 +50,8 @@ _BUNDLED_FONT_PATHS = {
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except: pass
+except Exception:
+    pass
 
 # 🎨 RENK PALETİ
 COLORS = {
@@ -73,15 +76,30 @@ COLORS = {
 # ==========================================
 # 🛠️ YARDIMCI FONKSİYONLAR
 # ==========================================
-def clean_visuals_folder():
-    if os.path.exists(OUTPUT_DIR):
-        print(f"🧹 Cleaning old visuals in '{OUTPUT_DIR}/'...")
-        for filename in os.listdir(OUTPUT_DIR):
-            file_path = os.path.join(OUTPUT_DIR, filename)
-            try:
-                if os.path.isfile(file_path) or os.path.islink(file_path): os.unlink(file_path)
-                elif os.path.isdir(file_path): shutil.rmtree(file_path)
-            except: pass
+def clean_visuals_folder(max_age_days=7):
+    """Delete only OLD visuals (previous events), not everything.
+
+    A full wipe meant a mid-run crash destroyed this week's already-good
+    assets and later posts went out without media. Age-based cleanup keeps
+    the current fight week's files while still purging stale events.
+    """
+    if not os.path.exists(OUTPUT_DIR):
+        return
+    import time as _time
+    cutoff = _time.time() - max_age_days * 86400
+    removed = 0
+    for filename in os.listdir(OUTPUT_DIR):
+        file_path = os.path.join(OUTPUT_DIR, filename)
+        try:
+            if os.path.isdir(file_path):
+                continue
+            if os.path.getmtime(file_path) < cutoff:
+                os.unlink(file_path)
+                removed += 1
+        except Exception as e:
+            print(f"   ⚠️ Could not clean {filename}: {e}")
+    if removed:
+        print(f"🧹 Removed {removed} visual(s) older than {max_age_days} days.")
 
 def load_font(font_key, size, fallback_bold=True):
     """TTF yükleme: config → paket fontları (tüm yedekler) → Win/Linux sistem → default.
@@ -200,6 +218,10 @@ class ImageHunter:
             return False
 
     def _get(self, url, timeout=10):
+        # UFCStats sits behind a JS proof-of-work check — route through the
+        # solving helper; every other domain uses plain requests.
+        if "ufcstats.com" in url.lower():
+            return ufcstats_fetch(url, headers=self.headers, timeout=timeout)
         return requests.get(url, headers=self.headers, timeout=timeout)
 
     # ---------- sources ----------
@@ -334,7 +356,7 @@ def fetch_height_ufcstats(url):
     if url in _height_scrape_cache:
         return _height_scrape_cache[url]
     try:
-        r = requests.get(url, headers=_ufcstats_req_headers(), timeout=10)
+        r = ufcstats_fetch(url, headers=_ufcstats_req_headers(), timeout=10)
         if r.status_code != 200:
             _height_scrape_cache[url] = None
             return None
@@ -606,7 +628,7 @@ def create_radar_chart(fight_data):
             val = source.get(key, 0)
             if is_percent and isinstance(val, str): val = float(val.replace('%', ''))
             return min(float(val) * multiplier, 10.0)
-        except: return 0.0
+        except Exception: return 0.0
 
     categories = ['Striking\nVol', 'Grappling', 'Finisher', 'Defense', 'Exp']
     v1 = [get_score(stats[0], 'SLpM', 1.6), get_score(stats[0], 'TD_Avg', 2.0),
@@ -634,8 +656,7 @@ def create_radar_chart(fight_data):
     plt.title(f"{f1.upper()} VS {f2.upper()}", color='white', weight='bold', size=16, pad=30)
     
     if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
-    safe_name = f"{f1.replace(' ','_')}_vs_{f2.replace(' ','_')}.png"
-    plt.savefig(f"{OUTPUT_DIR}/Radar_{safe_name}", facecolor=COLORS['bg'], dpi=120, bbox_inches='tight')
+    plt.savefig(os.path.join(OUTPUT_DIR, radar_basename(f1, f2)), facecolor=COLORS['bg'], dpi=120, bbox_inches='tight')
     plt.close()
 
 # ==========================================
@@ -705,7 +726,7 @@ def create_stat_card(fighter_name, stats, one_liner, img_path=None, record="N/A"
             noise = np.random.randint(-255*intensity, 255*intensity, np_img.shape, dtype='int16')
             noisy_img = np.clip(np_img.astype('int16') + noise, 0, 255).astype('uint8')
             return Image.fromarray(noisy_img)
-        except: return image
+        except Exception: return image
 
     # LAYER 0: Base Dark Background
     # (Already created above as 'img')
@@ -850,7 +871,7 @@ def create_stat_card(fighter_name, stats, one_liner, img_path=None, record="N/A"
             # Remove non-numeric chars (except dot)
             clean = "".join([c for c in str(val) if c.isdigit()])
             return int(clean) if clean else 50
-        except: return 50
+        except Exception: return 50
 
     # Get stats
     attributes = {
@@ -938,7 +959,7 @@ def create_stat_card(fighter_name, stats, one_liner, img_path=None, record="N/A"
             logo_img.thumbnail((200, 60), Image.LANCZOS)
             logo_x = (WIDTH - logo_img.width) // 2
             img.paste(logo_img, (logo_x, logo_y - 30), logo_img)
-        except:
+        except Exception:
             # Text fallback
             draw.text((WIDTH // 2, logo_y), "FIGHTIQ SCOUTING REPORT", 
                       font=font_logo, fill=COLORS['text_dark'], anchor="mt")
@@ -952,8 +973,7 @@ def create_stat_card(fighter_name, stats, one_liner, img_path=None, record="N/A"
                   font=font_subtitle, fill=COLORS['text_dark'], anchor="mt")
     
     # === SAVE ===
-    safe_name = fighter_name.replace(" ", "_")
-    filename = f"{OUTPUT_DIR}/Card_{safe_name}.png"
+    filename = os.path.join(OUTPUT_DIR, card_basename(fighter_name))
     img.save(filename, "PNG")
     print(f"   ✅ Created: {filename}")
 
@@ -1377,9 +1397,7 @@ def create_versus_card(fighter1_data, fighter2_data, card_stats, official_stats_
     _draw_text_cx_mid(draw, WIDTH // 2, content_bottom + 18, "FIGHTIQ.AI  ·  @FightIQBot", font_footer, "#888888")
 
     # ── Save ──────────────────────────────────────────
-    safe1 = f1_name.replace(' ', '_').replace("'", '')
-    safe2 = f2_name.replace(' ', '_').replace("'", '')
-    out_path = os.path.join(VISUALS_DIR, f"Versus_{safe1}_vs_{safe2}.png")
+    out_path = os.path.join(VISUALS_DIR, versus_basename(f1_name, f2_name))
     img.save(out_path, quality=95)
     print(f"   Versus Card saved: {out_path}")
     return out_path
@@ -1493,7 +1511,8 @@ def main():
         with open(RAW_DATA_FILE, "r", encoding="utf-8") as f: raw_data = json.load(f)
         for fight in raw_data:
             if 'deep_stats' in fight: create_radar_chart(fight)
-    except: pass
+    except Exception as e:
+        print(f"⚠️ Radar chart generation error: {e}")
 
     # 2. STAT KARTLARI (Canlı Mod İçin)
     try:

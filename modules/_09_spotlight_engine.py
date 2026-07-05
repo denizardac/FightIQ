@@ -15,6 +15,8 @@ import traceback
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, get_output_path, MODULES_DIR
+from core.naming import card_basename, versus_basename
+from core.ufcstats_http import fetch as ufcstats_fetch
 
 # Import config
 try:
@@ -89,18 +91,14 @@ def load_history():
             data = json.load(f)
             ninety_days_ago = datetime.now() - timedelta(days=config.SPOTLIGHT_HISTORY_DAYS)
             return [x for x in data if datetime.strptime(x['date'], "%Y-%m-%d") > ninety_days_ago]
-    except: return []
-
-def save_history(history, name):
-    history.append({"name": name, "date": datetime.now().strftime("%Y-%m-%d")})
-    with open(HISTORY_FILE, "w") as f: json.dump(history, f, indent=4)
+    except Exception: return []
 
 def load_db():
     try:
         with open(DB_FILE, "r", encoding="utf-8") as f: db = json.load(f)
         if "data" in db: return list(db["data"].keys()), db["data"]
         else: return list(db.keys()), db
-    except: return [], {}
+    except Exception: return [], {}
 
 def get_gemini_model():
     # Return initialized client
@@ -112,7 +110,7 @@ def scrape_fighter_detailed(url):
     resp = None
     for attempt in range(3):
         try:
-            resp = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=12)
+            resp = ufcstats_fetch(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=12)
             if resp.status_code == 200:
                 break
             resp = None
@@ -183,7 +181,7 @@ def scrape_fighter_detailed(url):
                         today = datetime.datetime.now()
                         age = today.year - dob_date.year - ((today.month, today.day) < (dob_date.month, dob_date.day))
                         data['age'] = age
-                except:
+                except Exception:
                     pass
 
         nick_tag = soup.find('p', class_='b-content__Nickname')
@@ -226,7 +224,7 @@ def scrape_fighter_detailed(url):
                     data['weight_class'] = f"Women's {base_class}"
                 else:
                     data['weight_class'] = base_class
-            except:
+            except Exception:
                 pass
 
         # RECENCY FILTER: ROW-WIDE REGEX (Date is in EVENT column)
@@ -253,7 +251,7 @@ def scrape_fighter_detailed(url):
                         year = int(match.group(3))  # Extract year (group 3)
                         data['last_fight_year'] = year
                         break  # Found most recent completed fight
-        except:
+        except Exception:
             pass
         
         # FALLBACK: High-tier fighter whitelist (if scraping fails)
@@ -271,7 +269,7 @@ def scrape_fighter_detailed(url):
                 data['last_fight_year'] = 2024  # Assume active
 
         return data
-    except: return None
+    except Exception: return None
 
 
 def scraped_to_official_row(scraped):
@@ -358,7 +356,7 @@ def generate_violence_content(fighter_data):
         slpm = float(fighter_data.get('slpm', 0))
         wins = fighter_data.get('wins', 0)
         score = min(99, int((slpm * 10) + (wins * 0.5)))
-    except: score = 75
+    except Exception: score = 75
 
     client = get_gemini_model()
     if not client: return None
@@ -382,7 +380,7 @@ def generate_violence_content(fighter_data):
     try:
         resp = generate_with_retry(client, config.GEMINI_MODELS[0], prompt)
         return parse_json_content(resp.text)
-    except: return None
+    except Exception: return None
 
 def generate_oracle_content(fighter1, fighter2):
     client = get_gemini_model()
@@ -409,7 +407,7 @@ def generate_oracle_content(fighter1, fighter2):
     try:
         resp = generate_with_retry(client, config.GEMINI_MODELS[0], prompt)
         return parse_json_content(resp.text)
-    except: return None
+    except Exception: return None
 
 def generate_anomaly_content(fighter1, fighter2, odds_val, stat_note):
     client = get_gemini_model()
@@ -450,7 +448,7 @@ def generate_anomaly_content(fighter1, fighter2, odds_val, stat_note):
     try:
         resp = generate_with_retry(client, config.GEMINI_MODELS[0], prompt)
         return parse_json_content(resp.text)
-    except: return None
+    except Exception: return None
 
 def generate_history_content(fighter_data):
     client = get_gemini_model()
@@ -472,7 +470,7 @@ def generate_history_content(fighter_data):
     try:
         resp = generate_with_retry(client, config.GEMINI_MODELS[0], prompt)
         return parse_json_content(resp.text)
-    except: return None
+    except Exception: return None
 
 # --- SCHEDULING LOGIC ---
 
@@ -522,7 +520,7 @@ def main():
             if trending:
                 print(f"   🔥 Trends Found: {len(trending)}")
                 candidates.extend([t for t in trending if t in urls])
-        except: pass
+        except Exception: pass
     
     random.shuffle(fighters_list)
     candidates.extend(fighters_list[:50]) # Add random filler
@@ -625,7 +623,7 @@ def main():
                 valid_classes = [f1_class_clean]
                 if idx > 0: valid_classes.append(WEIGHT_CLASSES[idx-1])
                 if idx < len(WEIGHT_CLASSES)-1: valid_classes.append(WEIGHT_CLASSES[idx+1])
-            except:
+            except Exception:
                 valid_classes = [f1_class_clean]
 
             for name, data in valid_fighters[1:]:
@@ -787,7 +785,7 @@ def main():
                             selected_data = d1
                             found_anomaly = True
                             break
-                    except:
+                    except Exception:
                         continue
         
         if not found_anomaly:
@@ -945,7 +943,7 @@ def main():
 
     if not selected_data or not ai_content:
         print("   ❌ FATAL: Could not generate content.")
-        return
+        sys.exit(1)
 
     # 5. GENERATE ASSETS
     if mode == "ORACLE" and isinstance(selected_data, dict) and 'fighter1' in selected_data:
@@ -985,19 +983,17 @@ def main():
     if mode == "ORACLE" and isinstance(selected_data, dict) and 'fighter1' in selected_data:
         fighter_name = selected_data['fighter1']['name']
         fighter2_name = selected_data['fighter2']['name']
-        safe_filename = f"{fighter_name.replace(' ', '_')}_vs_{fighter2_name.replace(' ', '_')}"
-        card_rel_path = f"Versus_{safe_filename}.png"
+        card_rel_path = versus_basename(fighter_name, fighter2_name)
         poll_opts = [f"Team {fighter_name}", f"Team {fighter2_name}", "Draw", "No Contest"]
     else:
         fighter_name = selected_data['name']
-        safe_filename = fighter_name.replace(' ', '_')
-        card_rel_path = f"Card_{safe_filename}.png"
+        card_rel_path = card_basename(fighter_name)
         poll_opts = None
     
     card_abs_path = get_output_path(card_rel_path, "visuals")
     if not os.path.exists(card_abs_path):
         print(f"   ❌ FATAL: Visual not created at {card_abs_path}")
-        return
+        sys.exit(1)
 
     video_path = None
     if VideoEngine and ai_content.get('video_script'):
@@ -1038,8 +1034,10 @@ def main():
     
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(final_output, f, indent=4)
-        
-    save_history(history, selected_data['name'])
+
+    # NOTE: spotlight_history is now written by the Social Director AFTER a
+    # successful post — recording it here burned the fighter even when the
+    # tweet never went out.
     print(f"   ✅ DONE! spotlight_ready.json created via {mode} mode.")
 
 if __name__ == "__main__":

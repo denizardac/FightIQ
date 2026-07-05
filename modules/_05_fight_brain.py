@@ -9,17 +9,19 @@ from dotenv import load_dotenv
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path
+from core.pipeline_meta import stamp_stage, require_fresh_stage
 import core.config as config
 from core.prediction_validate import implied_probability, validate_and_unify
 from core.market_catalog import summarize_markets_for_prompt
 from core.numeric_safe import safe_float
 from core.scout_enrich import enrich_scout, build_matchup_context
-from core.fighter_rating import compute_matchup_bars, style_one_liner
+from core.fighter_rating import compute_matchup_bars, style_one_liner, compute_streaks
 
 # UTF-8 Encoding
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except: pass
+except Exception:
+    pass
 
 # ==========================================
 # 🧠 STEP 5: FIGHT BRAIN (AI Analysis)
@@ -67,6 +69,43 @@ def clean_json(text):
     """Markdown temizleyici"""
     return text.replace("```json", "").replace("```", "").strip()
 
+
+def extract_json(text):
+    """Return the first complete, balanced JSON object from a model response.
+
+    Fixes the two dominant Gemini failure modes that were losing ~half the
+    card: trailing 'Extra data' after the object (multiple response parts
+    concatenated by .text), and markdown fences. Brace matching is
+    string/escape aware so braces inside string values don't fool it.
+    """
+    if not text:
+        return ""
+    t = text.replace("```json", "").replace("```", "").strip()
+    start = t.find("{")
+    if start == -1:
+        return t
+    depth = 0
+    in_str = False
+    esc = False
+    for i in range(start, len(t)):
+        c = t[i]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+        elif c == '"':
+            in_str = True
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return t[start:i + 1]
+    return t[start:]  # unbalanced — best effort
+
 # Global Model instance (Tekrar tekrar başlatmamak için)
 active_model = None
 
@@ -110,27 +149,6 @@ def _extract_scout_data(deep_list, stats_list, f1, f2):
                 return v
         return default
 
-    def _compute_streaks(last_5):
-        """Read last_5_results (most recent first) and produce win/loss streak counts."""
-        if not isinstance(last_5, list) or not last_5:
-            return 0, 0
-        wins, losses = 0, 0
-        for r in last_5:
-            r_low = str(r).lower()
-            if 'win' in r_low and losses == 0:
-                wins += 1
-                if wins and losses == 0 and wins == len(last_5):
-                    continue
-            else:
-                break
-        for r in last_5:
-            r_low = str(r).lower()
-            if 'loss' in r_low and wins == 0:
-                losses += 1
-            else:
-                break
-        return wins, losses
-
     def _rate(ds, key):
         raw = ds.get(key)
         if raw not in (None, "", "N/A", "--"):
@@ -139,7 +157,7 @@ def _extract_scout_data(deep_list, stats_list, f1, f2):
 
     def scout(name, ds, st):
         last_5 = ds.get('last_5_results', st.get('last_5', []))
-        win_streak, loss_streak = _compute_streaks(last_5)
+        win_streak, loss_streak = compute_streaks(last_5)
         return {
             "name":            name,
             "record":          f"{ds.get('wins',0)}-{ds.get('losses',0)}-{ds.get('draws',0)}",
@@ -311,8 +329,23 @@ Return ONLY this JSON object:
   "spotlight_content": "<Max 275 chars. Wednesday Fighter Spotlight. Start with: 🔦 SPOTLIGHT: [Name]. Hook with the most jaw-dropping stat or career moment. English only.>"
 }}"""
 
-        response = generate_with_retry(active_model, prompt)
-        output = json.loads(clean_json(response.text))
+        # Parse with robust extraction; on a malformed sample, redraw once
+        # (low temperature means the same prompt usually yields valid JSON
+        # the second time). Previously a single bad sample lost the fight.
+        output = None
+        last_parse_err = None
+        for parse_attempt in range(2):
+            response = generate_with_retry(active_model, prompt)
+            try:
+                output = json.loads(extract_json(response.text))
+                break
+            except json.JSONDecodeError as je:
+                last_parse_err = je
+                print(f"   ⚠️ JSON parse failed (attempt {parse_attempt + 1}/2): {je}")
+                time.sleep(2)
+        if output is None:
+            raise last_parse_err or ValueError("Empty AI response")
+
         output = validate_and_unify(
             output, f1, f2,
             market if isinstance(market, dict) else {},
@@ -341,55 +374,52 @@ Return ONLY this JSON object:
         return None
 
 def main():
+    global active_model
     print(f"--- 🧠 STEP 5: FIGHT BRAIN (ROBUST V2) ---")
-    
+
     # Robust file load
     if not os.path.exists(INPUT_FILE):
         print(f"❌ ERROR: '{INPUT_FILE}' not found. Run Step 4 first.")
-        return
-    
+        sys.exit(1)
+
+    # Stale-input guard: never analyze a previous event's data
+    require_fresh_stage("2_data_final")
+
     try:
-        with open(INPUT_FILE, "r", encoding="utf-8") as f: 
+        with open(INPUT_FILE, "r", encoding="utf-8") as f:
             fights = json.load(f)
     except json.JSONDecodeError as e:
         print(f"❌ ERROR: Invalid JSON in {INPUT_FILE}: {e}")
-        return
+        sys.exit(1)
 
     results = []
     failed_fights = []
     print(f"📂 Processing {len(fights)} fights...")
+
+    # Model seçimini başta yap (fail fast) ve sonucu sakla —
+    # eskiden dönen model atılıyor ve probing iki kez yapılıyordu.
+    active_model = get_working_model()
     
-    # Model seçimini başta yap
-    get_working_model() 
-    
+    required_fields = ['prediction', 'violence_score']
     for i, fight in enumerate(fights):
         matchup_name = f"{fight['fighters'][0]} vs {fight['fighters'][1]}"
+
+        def _valid(o):
+            return bool(o) and all(field in o for field in required_fields)
+
         output = analyze_matchup(fight)
-        
-        if output:
-            # Validate essential fields
-            required_fields = ['prediction', 'violence_score']
-            if all(field in output for field in required_fields):
-                results.append({
-                    "matchup": matchup_name,
-                    "timestamp": time.strftime("%Y-%m-%d"),
-                    "fight_brain_output": output
-                })
-                print(f"   ✅ Analysis complete")
-            else:
-                print(f"   ⚠️ WARNING: Incomplete AI output for {matchup_name}, retrying...")
-                # Retry once
-                output_retry = analyze_matchup(fight)
-                if output_retry and all(field in output_retry for field in required_fields):
-                    results.append({
-                        "matchup": matchup_name,
-                        "timestamp": time.strftime("%Y-%m-%d"),
-                        "fight_brain_output": output_retry
-                    })
-                    print(f"   ✅ Retry successful")
-                else:
-                    failed_fights.append(matchup_name)
-                    print(f"   ❌ Failed after retry")
+        if not _valid(output):
+            # One more full retry (covers both None and incomplete output)
+            print(f"   ⚠️ Incomplete/failed output for {matchup_name}, retrying once...")
+            output = analyze_matchup(fight)
+
+        if _valid(output):
+            results.append({
+                "matchup": matchup_name,
+                "timestamp": time.strftime("%Y-%m-%d"),
+                "fight_brain_output": output
+            })
+            print(f"   ✅ Analysis complete")
         else:
             failed_fights.append(matchup_name)
             print(f"   ❌ AI analysis failed for {matchup_name}")
@@ -404,8 +434,13 @@ def main():
         print(f"   ❌ Failed: {len(failed_fights)}")
         print(f"   Failed fights: {', '.join(failed_fights)}")
 
+    if fights and not results:
+        print("\n❌ ALL AI analyses failed — not overwriting results, failing the stage.")
+        sys.exit(1)
+
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(results, f, indent=4)
+    stamp_stage("3_results")
     print(f"\n✅ AI Analysis Complete. Saved to '{OUTPUT_FILE}'")
 
 if __name__ == "__main__":

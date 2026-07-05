@@ -10,6 +10,7 @@ from datetime import datetime
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path
+from core.ufcstats_http import fetch as ufcstats_fetch
 
 # ==========================================
 # 🔧 FIGHTIQ: DB INDEXER (ROBUST VERSION)
@@ -20,7 +21,7 @@ DB_FILE = get_data_path("fighters_db.json")
 # Windows konsol düzeltmesi (Linux'ta zararı yok)
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except:
+except Exception:
     pass 
 
 def create_fighter_database():
@@ -51,7 +52,7 @@ def create_fighter_database():
         success = False
         for attempt in range(3): # 3 kere dene
             try:
-                response = requests.get(url, headers=headers, timeout=15)
+                response = ufcstats_fetch(url, headers=headers)
                 if response.status_code == 200:
                     success = True
                     break
@@ -92,10 +93,24 @@ def create_fighter_database():
         except Exception as e:
             print(f" ❌ Parse Error: {e}")
 
+    # GUARD: a failed/partial scrape must never clobber a good existing DB.
+    if total_count < 1000:
+        existing_count = 0
+        try:
+            with open(DB_FILE, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+                existing_count = len(existing.get("data", existing))
+        except Exception:
+            pass
+        if existing_count > total_count:
+            print(f"\n❌ Scrape returned only {total_count} fighters but existing DB has "
+                  f"{existing_count} — keeping the old database.")
+            sys.exit(1)
+
     # JSON dosyasına kaydet
     with open(DB_FILE, "w", encoding="utf-8") as f:
         json.dump(fighter_db, f, indent=4)
-        
+
     print(f"\n🎉 Database Complete! Total Fighters: {total_count}")
     print(f"Saved to '{DB_FILE}'")
 

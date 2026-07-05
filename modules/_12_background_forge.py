@@ -31,7 +31,7 @@ CACHE_FILE = os.path.join(ASSETS_DIR, "background_cache.json")
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except:
+except Exception:
     pass
 
 # Load environment (project root — not dependent on cwd)
@@ -57,7 +57,7 @@ def load_cache():
         try:
             with open(CACHE_FILE, "r", encoding="utf-8") as f:
                 return json.load(f)
-        except:
+        except Exception:
             return {}
     return {}
 

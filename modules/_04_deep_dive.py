@@ -10,21 +10,21 @@ import os
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path
+from core.pipeline_meta import stamp_stage, check_stage_fresh
+from core.ufcstats_http import fetch as ufcstats_fetch
 
 # UTF-8 Encoding
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except: pass
+except Exception:
+    pass
 
 # ==========================================
 # ⚙️ AYARLAR
 # ==========================================
 INPUT_FILE = get_data_path("2_data_with_odds.json")
+FALLBACK_INPUT_FILE = get_data_path("2_data.json")
 OUTPUT_FILE = get_data_path("2_data_final.json")
-
-try:
-    sys.stdout.reconfigure(encoding='utf-8')
-except: pass
 
 
 def _parse_official_record(soup):
@@ -105,7 +105,7 @@ class DeepStatsEngine:
         last_err = None
         for attempt in range(3):
             try:
-                resp = requests.get(url, headers=self.headers, timeout=18)
+                resp = ufcstats_fetch(url, headers=self.headers, timeout=18)
                 if resp.status_code == 200:
                     return resp
                 last_err = f"HTTP {resp.status_code}"
@@ -282,28 +282,38 @@ class DeepStatsEngine:
             print(f"      ⚠️ Profile parsing error: {e}")
             return None
 
+def _pick_input_file():
+    """Prefer odds-enriched data; fall back to raw scout data if odds stage
+    is missing/stale. Odds are optional — stat data is NOT, so we must never
+    silently reuse a previous event's file."""
+    odds_ok, odds_reason = check_stage_fresh("2_data_with_odds")
+    if os.path.exists(INPUT_FILE) and odds_ok:
+        return INPUT_FILE
+
+    print(f"⚠️ Odds-enriched input unavailable ({odds_reason}).")
+    scout_ok, scout_reason = check_stage_fresh("2_data")
+    if os.path.exists(FALLBACK_INPUT_FILE) and scout_ok:
+        print(f"   ↩️ Falling back to '{FALLBACK_INPUT_FILE}' (no odds this run).")
+        return FALLBACK_INPUT_FILE
+
+    print(f"❌ ERROR: No fresh input available ({scout_reason}). Run steps 2/3 first.")
+    sys.exit(1)
+
+
 def main():
     print("--- 🧬 STEP 4: DEEP STATS ENGINE (V2 FIXED) ---")
-    
-    # Robust file load with validation
-    if not os.path.exists(INPUT_FILE):
-        print(f"❌ ERROR: '{INPUT_FILE}' not found. Run Step 3 (odds_hunter) first.")
-        return
-    
-    # Check file age
-    file_age = time.time() - os.path.getmtime(INPUT_FILE)
-    if file_age > 24 * 3600:  # 24 hours
-        print(f"⚠️ WARNING: {INPUT_FILE} is {file_age/3600:.1f} hours old. Data may be stale.")
-    
+
+    input_file = _pick_input_file()
+
     try:
-        with open(INPUT_FILE, "r", encoding="utf-8") as f:
+        with open(input_file, "r", encoding="utf-8") as f:
             data = json.load(f)
     except json.JSONDecodeError as e:
-        print(f"❌ ERROR: {INPUT_FILE} contains invalid JSON: {e}")
-        return
+        print(f"❌ ERROR: {input_file} contains invalid JSON: {e}")
+        sys.exit(1)
     except Exception as e:
-        print(f"❌ ERROR: Failed to load {INPUT_FILE}: {e}")
-        return
+        print(f"❌ ERROR: Failed to load {input_file}: {e}")
+        sys.exit(1)
 
     engine = DeepStatsEngine()
     
@@ -343,7 +353,8 @@ def main():
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=4)
-        
+    stamp_stage("2_data_final")
+
     print(f"\n📁 Final Data Saved to '{OUTPUT_FILE}'")
 
 if __name__ == "__main__":

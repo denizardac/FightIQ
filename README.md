@@ -96,15 +96,21 @@ This script will:
 - Pull latest code from git
 - Install/update dependencies
 - Verify `.env` and `data/fighters_db.json`
-- Install the two cron jobs below
+- Install the cron jobs below
+
+Custom install path: `FIGHTIQ_DIR=/opt/FightIQ bash core/deploy.sh --setup-cron`
 
 ### Cron schedule (installed automatically by deploy.sh)
 ```
-# Daily pipeline — 09:00 every day
+# Daily pipeline — 09:00 UTC every day
 0 9 * * * /path/to/venv/bin/python3 /path/to/FightIQ/run.py >> logs/cron.log 2>&1
 
-# Fight night Live Wire — 18:00 every Saturday
+# Fight night Live Wire — 18:00 UTC Saturday and Sunday
 0 18 * * 6 /path/to/venv/bin/python3 /path/to/FightIQ/modules/_13_live_wire.py --auto >> logs/livewire.log 2>&1
+0 18 * * 0 /path/to/venv/bin/python3 /path/to/FightIQ/modules/_13_live_wire.py --auto >> logs/livewire.log 2>&1
+
+# Weekly fighter DB refresh — Monday 07:00 UTC (keeps new fighters findable)
+0 7 * * 1 /path/to/venv/bin/python3 /path/to/FightIQ/modules/_00_indexer.py >> logs/indexer.log 2>&1
 ```
 
 ### Pre-flight checklist

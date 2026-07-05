@@ -5,6 +5,30 @@ Avoids absurd 96 vs 49 unless stats truly dominate; anchored to 50/50.
 import re
 
 
+def compute_streaks(last_5):
+    """Win/loss streak from last_5_results (most recent first).
+
+    Returns (win_streak, loss_streak) — at most one of them is non-zero.
+    """
+    if not isinstance(last_5, list) or not last_5:
+        return 0, 0
+    first = str(last_5[0]).lower()
+    wins = losses = 0
+    if "win" in first:
+        for r in last_5:
+            if "win" in str(r).lower():
+                wins += 1
+            else:
+                break
+    elif "loss" in first:
+        for r in last_5:
+            if "loss" in str(r).lower():
+                losses += 1
+            else:
+                break
+    return wins, losses
+
+
 def _pct(val, default=0.0):
     if val is None:
         return default

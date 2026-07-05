@@ -39,7 +39,8 @@ MAX_CANDIDATE_PAIRS = 10           # For ORACLE/ANOMALY modes
 # BETIST (LIVE ODDS) SETTINGS
 # ==========================================
 
-BETIST_REDIRECT_URL = "https://cutt.ly/zrIT6E9d"
+# Override with env var when the shortlink dies (single point of failure)
+BETIST_REDIRECT_URL = os.environ.get("BETIST_REDIRECT_URL", "https://cutt.ly/zrIT6E9d")
 BETIST_KNOWN_LEAGUE_IDS = ["41875249", "41875250", "30582", "41875251"]
 BETIST_REQUEST_TIMEOUT = 15
 BETIST_RETRY_DELAY = 2             # Seconds between retries
@@ -154,6 +155,17 @@ FONT_PATHS = {
     "body_bold": "assets/fonts/Roboto-Bold.ttf",           # Body Bold
     "body_regular": "assets/fonts/Roboto-Regular.ttf"      # Body Regular
 }
+
+# ==========================================
+# PIPELINE SAFETY
+# ==========================================
+
+# Stale-input guard: a stage output older than this (or stamped for another
+# event) aborts the pipeline instead of publishing content for the wrong card.
+PIPELINE_STAGE_MAX_AGE_HOURS = 36
+
+# posted_history.json cap — oldest entries pruned beyond this
+POSTED_HISTORY_MAX_ENTRIES = 400
 
 # ==========================================
 # LOGGING

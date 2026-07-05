@@ -6,6 +6,7 @@ import sys
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, VISUALS_DIR, MODULES_DIR
+from core.naming import radar_basename
 
 # ==========================================
 # 🎬 FIGHTIQ: MATCHUP VIDEO BRIDGE
@@ -16,7 +17,7 @@ AI_RESULTS_FILE = get_data_path("3_results.json")
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except:
+except Exception:
     pass
 
 
@@ -30,26 +31,18 @@ except ImportError as e:
 
 def find_radar_chart(fighter1, fighter2):
     """
-    Find the radar chart PNG for a matchup.
+    Find the radar chart PNG for a matchup (canonical naming via core.naming).
     """
-    # Clean names for filename matching
-    def clean_name(name):
-        return "".join([c for c in name if c.isalnum() or c == ' ']).replace(' ', '_')
-    
-    f1_clean = clean_name(fighter1)
-    f2_clean = clean_name(fighter2)
-    
-    # Possible filename patterns
     patterns = [
-        f"Radar_{f1_clean}_vs_{f2_clean}.png",
-        f"Radar_{f2_clean}_vs_{f1_clean}.png"  # Try reversed
+        radar_basename(fighter1, fighter2),
+        radar_basename(fighter2, fighter1),  # Try reversed
     ]
-    
+
     for pattern in patterns:
         path = os.path.join(VISUALS_DIR, pattern)
         if os.path.exists(path):
             return path
-    
+
     return None
 
 def generate_voiceover_script(fight_brain_output):

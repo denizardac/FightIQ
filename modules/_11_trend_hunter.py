@@ -24,7 +24,7 @@ def load_fighter_names():
             # data structure might be {"data": {"Name": "url", ...}} or just {"Name": "url"}
             if "data" in data: return list(data["data"].keys())
             return list(data.keys())
-    except: return []
+    except Exception: return []
 
 def get_trending_fighters():
     print("   📈 Trend Hunter: Scanning MMA News Sources...")

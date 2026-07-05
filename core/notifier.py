@@ -2,7 +2,7 @@
 import os
 import requests
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 
 # Setup logger
@@ -44,7 +44,7 @@ def send_discord_alert(message, status="INFO", webhook_url=None):
                 "title": f"FightIQ Alert: {status.upper()}",
                 "description": message,
                 "color": color,
-                "timestamp": datetime.utcnow().isoformat(),
+                "timestamp": datetime.now(timezone.utc).isoformat(),
                 "footer": {
                     "text": "FightIQ Automation System"
                 }

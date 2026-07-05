@@ -21,6 +21,8 @@ data/*.json
 !data/fighters_db.json
 # Post history must persist on the server — DO NOT ignore
 !data/posted_history.json
+# All-time prediction accuracy ledger must persist across deploys too
+!data/prediction_ledger.json
 
 # Logs
 logs/

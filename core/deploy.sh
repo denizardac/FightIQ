@@ -8,8 +8,8 @@ echo "=============================================="
 echo "🚀 FIGHTIQ DEPLOYMENT & RESTART"
 echo "=============================================="
 
-# Configuration
-PROJECT_DIR="/root/FightIQ"  # UPDATE THIS PATH
+# Configuration — override with:  FIGHTIQ_DIR=/path/to/FightIQ bash core/deploy.sh
+PROJECT_DIR="${FIGHTIQ_DIR:-/root/FightIQ}"
 LOG_FILE="logs/deploy.log"
 VENV_PATH="venv/bin/activate"
 
@@ -168,6 +168,9 @@ if [[ "$1" == "--setup-cron" ]]; then
 
 # FightIQ — Live Wire fight night: Sunday 18:00 UTC
 0 18 * * 0 $PYTHON_BIN $PROJECT_DIR/modules/_13_live_wire.py --auto >> $PROJECT_DIR/logs/livewire.log 2>&1
+
+# FightIQ — Weekly fighter DB refresh: Monday 07:00 UTC (before daily pipeline)
+0 7 * * 1 $PYTHON_BIN $PROJECT_DIR/modules/_00_indexer.py >> $PROJECT_DIR/logs/indexer.log 2>&1
 CRON
     ) | crontab -
 

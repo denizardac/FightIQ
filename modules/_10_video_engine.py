@@ -5,6 +5,7 @@ import sys
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import VISUALS_DIR, ASSETS_DIR, DATA_DIR
+from core.naming import safe_filename_lower
 
 # Ensure we can find installed packages
 try:
@@ -59,7 +60,7 @@ def create_reel(fighter_name, image_path, script_text, output_filename=None):
 
     if not output_filename:
         if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
-        safe_name = fighter_name.replace(" ", "_").lower()
+        safe_name = safe_filename_lower(fighter_name)
         output_filename = os.path.join(OUTPUT_DIR, f"Reel_{safe_name}.mp4")
 
     # 1. AUDIO LAYER
@@ -134,8 +135,8 @@ def create_matchup_reel(radar_chart_path, prediction_script, f1_name, f2_name, o
     if not output_filename:
         if not os.path.exists(OUTPUT_DIR):
             os.makedirs(OUTPUT_DIR)
-        safe_f1 = f1_name.replace(" ", "_").lower()
-        safe_f2 = f2_name.replace(" ", "_").lower()
+        safe_f1 = safe_filename_lower(f1_name)
+        safe_f2 = safe_filename_lower(f2_name)
         output_filename = os.path.join(OUTPUT_DIR, f"Reel_Matchup_{safe_f1}_vs_{safe_f2}.mp4")
     
     # 1. AUDIO LAYER

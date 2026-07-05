@@ -141,15 +141,23 @@ class TwitterClient:
         text: str,
         media_path: Optional[str] = None,
         reply_to_id: Optional[str] = None,
+        poll_options: Optional[list] = None,
+        poll_duration_minutes: Optional[int] = None,
     ) -> Optional[str]:
         if self.dry_run:
             print(f"\n[DRY-RUN] TWEET (reply_to={reply_to_id}):\n  {text[:120]}...")
             if media_path:
                 print(f"  MEDIA: {media_path}")
+            if poll_options:
+                print(f"  POLL: {poll_options}")
             return "DRY_RUN_FAKE_ID"
 
         if self.backend == "official":
-            return self._post_official(text, media_path, reply_to_id)
+            return self._post_official(
+                text, media_path, reply_to_id, poll_options, poll_duration_minutes
+            )
+        if poll_options:
+            print("   ⚠️ Polls require the official API backend — posting text only")
         return self._post_twikit_with_retry(text, media_path, reply_to_id)
 
     def _post_official(
@@ -157,6 +165,8 @@ class TwitterClient:
         text: str,
         media_path: Optional[str],
         reply_to_id: Optional[str],
+        poll_options: Optional[list] = None,
+        poll_duration_minutes: Optional[int] = None,
     ) -> Optional[str]:
         media_ids = []
         if media_path and os.path.exists(str(media_path)):
@@ -170,6 +180,10 @@ class TwitterClient:
         kwargs = {"text": text}
         if media_ids:
             kwargs["media_ids"] = media_ids
+        elif poll_options:
+            # Twitter disallows media + poll on the same tweet; media wins above
+            kwargs["poll_options"] = [str(o)[:25] for o in poll_options[:4]]
+            kwargs["poll_duration_minutes"] = int(poll_duration_minutes or 1440)
         if reply_to_id and str(reply_to_id).isdigit():
             kwargs["in_reply_to_tweet_id"] = int(reply_to_id)
 
@@ -188,11 +202,12 @@ class TwitterClient:
         media_path: Optional[str],
         reply_to_id: Optional[str],
     ) -> Optional[str]:
-        delays = [
-            0,
-            config.TWITTER_226_BASE_DELAY,
-            config.TWITTER_226_BASE_DELAY * 2,
-        ][: config.TWITTER_226_MAX_RETRIES]
+        # First attempt is immediate; retries back off exponentially.
+        # Length follows TWITTER_226_MAX_RETRIES (it used to be capped at 3).
+        attempts = max(1, config.TWITTER_226_MAX_RETRIES)
+        delays = [0] + [
+            config.TWITTER_226_BASE_DELAY * (2 ** i) for i in range(attempts - 1)
+        ]
 
         last_err = None
         for attempt, wait in enumerate(delays):

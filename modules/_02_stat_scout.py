@@ -12,6 +12,8 @@ import re
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path
+from core.pipeline_meta import stamp_stage
+from core.ufcstats_http import fetch as ufcstats_fetch
 import core.config as config # P2: Explicit config import
 
 # ==========================================
@@ -23,7 +25,33 @@ OUTPUT_FILE = get_data_path("2_data.json")
 
 try:
     sys.stdout.reconfigure(encoding='utf-8')
-except: pass
+except Exception:
+    pass
+
+
+try:
+    from bs4 import XMLParsedAsHTMLWarning
+    import warnings
+    warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+except Exception:
+    pass
+
+
+def _parse_feed(content):
+    """Parse an RSS/Atom feed, tolerating a missing lxml install.
+
+    BeautifulSoup's 'xml' feature REQUIRES lxml; when it's absent every news
+    fetch used to raise FeatureNotFound and the AI prompt got zero headlines.
+    Fall back to the always-available stdlib html.parser (good enough for
+    reading <item><title> text).
+    """
+    for parser in ("xml", "lxml-xml", "html.parser"):
+        try:
+            return BeautifulSoup(content, parser)
+        except Exception:
+            continue
+    return BeautifulSoup(content, "html.parser")
+
 
 class SmartScraper:
     def __init__(self):
@@ -73,7 +101,7 @@ class SmartScraper:
         resp = None
         for attempt in range(3):
             try:
-                resp = requests.get(url, headers=self._get_headers(), timeout=15)
+                resp = ufcstats_fetch(url, headers=self._get_headers())
                 if resp.status_code == 200:
                     break
                 resp = None
@@ -150,7 +178,7 @@ class SmartScraper:
         try:
             rss_url = f"https://news.google.com/rss/search?q={urllib.parse.quote(name)}+UFC&hl=en-US&gl=US&ceid=US:en"
             resp = requests.get(rss_url, headers=self._get_headers(), timeout=10)
-            soup = BeautifulSoup(resp.content, 'xml')
+            soup = _parse_feed(resp.content)
             for item in soup.find_all('item', limit=2):
                 all_news.append({
                     "title": item.title.text,
@@ -158,13 +186,14 @@ class SmartScraper:
                     "link": item.link.text if item.link else "",
                     "source": "Google News"
                 })
-        except: pass
+        except Exception as e:
+            print(f"      ⚠️ Google News RSS failed: {type(e).__name__}: {str(e)[:60]}")
         
         # Source 2: MMA Fighting RSS (dedicated MMA site)
         try:
             mma_rss = f"https://www.mmafighting.com/rss/index.xml"
             resp = requests.get(mma_rss, headers=self._get_headers(), timeout=8)
-            soup = BeautifulSoup(resp.content, 'xml')
+            soup = _parse_feed(resp.content)
             for item in soup.find_all('item'):
                 title = item.title.text if item.title else ""
                 # Only include if fighter name mentioned
@@ -176,13 +205,14 @@ class SmartScraper:
                         "source": "MMA Fighting"
                     })
                     if len(all_news) >= 4: break
-        except: pass
+        except Exception as e:
+            print(f"      ⚠️ MMA Fighting RSS failed: {type(e).__name__}: {str(e)[:60]}")
         
         # Source 3: ESPN MMA RSS
         try:
             espn_rss = "https://www.espn.com/espn/rss/mma/news"
             resp = requests.get(espn_rss, headers=self._get_headers(), timeout=8)
-            soup = BeautifulSoup(resp.content, 'xml')
+            soup = _parse_feed(resp.content)
             for item in soup.find_all('item'):
                 title = item.title.text if item.title else ""
                 if name.lower() in title.lower():
@@ -193,7 +223,8 @@ class SmartScraper:
                         "source": "ESPN MMA"
                     })
                     if len(all_news) >= 5: break
-        except: pass
+        except Exception as e:
+            print(f"      ⚠️ ESPN RSS failed: {type(e).__name__}: {str(e)[:60]}")
         
         # Return top 3 most recent
         return all_news[:3] if all_news else []
@@ -206,14 +237,17 @@ def main():
             card_data = json.load(f)
     except FileNotFoundError:
         print(f"❌ '{INPUT_FILE}' not found.")
-        return
+        sys.exit(1)
+    except json.JSONDecodeError as e:
+        print(f"❌ '{INPUT_FILE}' contains invalid JSON: {e}")
+        sys.exit(1)
 
     bot = SmartScraper()
-    
+
     # DB kontrolü
     if len(bot.db) < 100:
         print("🛑 STOPPING: Database is nearly empty. Please run '00_indexer.py' fully.")
-        return
+        sys.exit(1)
 
     enriched_fights = []
     fights = card_data.get('fights', [])
@@ -254,9 +288,14 @@ def main():
         
         time.sleep(1)
 
+    if fights and not enriched_fights:
+        print("❌ No fights could be enriched — failing so the pipeline stops.")
+        sys.exit(1)
+
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(enriched_fights, f, indent=4)
-        
+    stamp_stage("2_data", card_data.get("event", ""))
+
     print(f"\n✅ SUCCESS: Data mined for {len(enriched_fights)} fights.")
     print(f"📁 Saved to '{OUTPUT_FILE}'")
 

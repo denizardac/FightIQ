@@ -7,6 +7,13 @@ import argparse
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Windows console UTF-8 (emoji in prints) — missing here while every other
+# module had it; crashed on cp1252 consoles.
+try:
+    sys.stdout.reconfigure(encoding="utf-8")
+except Exception:
+    pass
+
 # ==========================================
 # DRY-RUN MODE: use --dry-run to skip Twitter posts
 # ==========================================
@@ -20,7 +27,9 @@ if DRY_RUN:
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, VISUALS_DIR, PROJECT_ROOT
+from core.naming import safe_filename, safe_filename_lower
 from core.parlay_logic import combined_odds
+from core.pipeline_meta import check_stage_fresh
 from core.twitter_client import TwitterClient
 import core.config as config
 
@@ -33,6 +42,7 @@ FILES = {
     "history": get_data_path("posted_history.json"),
     "visuals": VISUALS_DIR,
     "spotlight": get_data_path("spotlight_ready.json"),
+    "spotlight_history": get_data_path("spotlight_history.json"),
 }
 
 
@@ -86,8 +96,33 @@ class SocialDirector:
             print(f"  [DRY-RUN] Would save to history: {item_id}")
             return
         self.history.append(item_id)
+        # Cap unbounded growth — keep the newest entries only
+        max_entries = getattr(config, "POSTED_HISTORY_MAX_ENTRIES", 400)
+        if len(self.history) > max_entries:
+            self.history = self.history[-max_entries:]
         with open(FILES["history"], "w") as f:
             json.dump(self.history, f, indent=4)
+
+    def _mark_spotlight_history(self, fighter_name):
+        """Record the fighter in spotlight_history.json AFTER a successful post.
+
+        Was previously written by the spotlight engine at generation time, so
+        a failed post permanently 'burned' the fighter without any content
+        ever reaching Twitter."""
+        if self.dry_run or not fighter_name:
+            return
+        try:
+            history = []
+            if os.path.exists(FILES["spotlight_history"]):
+                with open(FILES["spotlight_history"], "r") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, list):
+                        history = loaded
+            history.append({"name": fighter_name, "date": datetime.today().strftime("%Y-%m-%d")})
+            with open(FILES["spotlight_history"], "w") as f:
+                json.dump(history, f, indent=4)
+        except Exception as e:
+            print(f"   ⚠️ Could not update spotlight history: {e}")
 
     def _sleep_between_posts(self, is_reply: bool = False):
         if self.dry_run:
@@ -110,8 +145,9 @@ class SocialDirector:
         time.sleep(wait)
 
     def find_image(self, f1, f2, visual_type="Versus"):
-        safe_f1 = "".join([c for c in f1 if c.isalnum() or c == " "]).replace(" ", "_")
-        safe_f2 = "".join([c for c in f2 if c.isalnum() or c == " "]).replace(" ", "_")
+        # Uses the SAME canonical sanitizer as the visual engine (core.naming)
+        safe_f1 = safe_filename(f1)
+        safe_f2 = safe_filename(f2)
 
         if visual_type == "Versus":
             for s1, s2 in [(safe_f1, safe_f2), (safe_f2, safe_f1)]:
@@ -138,8 +174,8 @@ class SocialDirector:
         return path if os.path.exists(path) else None
 
     def find_video(self, f1, f2, video_type="Matchup"):
-        safe_f1 = "".join([c for c in f1 if c.isalnum() or c == " "]).replace(" ", "_").lower()
-        safe_f2 = "".join([c for c in f2 if c.isalnum() or c == " "]).replace(" ", "_").lower()
+        safe_f1 = safe_filename_lower(f1)
+        safe_f2 = safe_filename_lower(f2)
         patterns = [
             f"Reel_{video_type}_{safe_f1}_vs_{safe_f2}.mp4",
             f"Reel_{video_type}_{safe_f2}_vs_{safe_f1}.mp4",
@@ -156,11 +192,14 @@ class SocialDirector:
         return path if os.path.exists(path) else None
 
     def post_tweet(self, text, media_path=None, reply_to_id=None, poll_options=None, poll_duration_minutes=None):
-        if poll_options:
-            print("   ⚠️ Polls not supported — posting text only")
-
         print(f"\n🐦 POSTING (Reply: {reply_to_id}):\n{text[:60]}...")
-        tweet_id = self.twitter.post(text, media_path=media_path, reply_to_id=reply_to_id)
+        tweet_id = self.twitter.post(
+            text,
+            media_path=media_path,
+            reply_to_id=reply_to_id,
+            poll_options=poll_options,
+            poll_duration_minutes=poll_duration_minutes,
+        )
         if not tweet_id:
             self.post_failed = True
         return tweet_id
@@ -182,6 +221,12 @@ class SocialDirector:
 
     def post_spotlight_file(self):
         if not os.path.exists(FILES["spotlight"]):
+            return True
+        # Stale guard: spotlight_ready.json is regenerated daily. If the
+        # engine failed today, don't re-post yesterday's leftover content.
+        age_hours = (time.time() - os.path.getmtime(FILES["spotlight"])) / 3600.0
+        if age_hours > 20:
+            print(f"   ⏭️ spotlight_ready.json is {age_hours:.0f}h old — skipping (stale).")
             return True
         try:
             with open(FILES["spotlight"], "r") as f:
@@ -218,6 +263,7 @@ class SocialDirector:
                 last_id = reply_id
 
             self.save_history(self._done_id(uid))
+            self._mark_spotlight_history(data.get("fighter"))
             return True
 
         except Exception as e:
@@ -324,7 +370,9 @@ class SocialDirector:
         for item in results:
             if count >= limit:
                 break
-            match = item["matchup"]
+            match = item.get("matchup", "")
+            if " vs " not in match:
+                continue
             uid = f"{match}_{t_type}"
             if self._already_posted(uid):
                 continue
@@ -335,7 +383,7 @@ class SocialDirector:
                 text = brain.get("content_tweets", {}).get(t_type, "")
             if not text:
                 continue
-            f1, f2 = match.split(" vs ")
+            f1, f2 = match.split(" vs ", 1)
             media = self.find_image(f1, f2, "Versus") or self.find_image(f1, f2, "Card")
 
             if count == 0:
@@ -389,27 +437,50 @@ class SocialDirector:
                 c = json.load(f)
                 status = c.get("status", "IDLE")
                 ename = c.get("event", "UFC")
+                days_until = c.get("days_until")
         except Exception:
             status = "IDLE"
             ename = "UFC"
+            days_until = None
 
-        day = datetime.today().weekday()
-        print(f"📅 Agenda: {status} | Day: {day}")
+        if status == "ERROR":
+            print("❌ Card status is ERROR — refusing to post anything.")
+            return False
+
+        print(f"📅 Agenda: {status} | Days until event: {days_until}")
 
         ok = True
         if status == "LIVE":
-            if day == 0:
+            # Stale-content guard: never post fight-week content generated
+            # for a different event or an old run.
+            fresh, reason = check_stage_fresh("3_results", event=ename)
+            if not fresh:
+                print(f"❌ LIVE content blocked: {reason}")
+                return False
+
+            # Agenda keyed to days-until-event (not weekday) so a fight week
+            # detected mid-week still posts the right content and a missed
+            # kickoff is caught up instead of skipped forever.
+            if days_until is None:
+                day = datetime.today().weekday()
+                days_until = {0: 5, 1: 4, 2: 3, 3: 2, 4: 1, 5: 0}.get(day, 99)
+
+            kick_uid = f"KICK_{datetime.today().strftime('%Y_%W')}"
+            if days_until >= 5:
                 ok = self._kickoff_tweet(ename)
-            elif day == 1:
-                ok = self.post_live_content("analysis_tweet", "Versus", 3)
-            elif day == 2:
-                ok = self.post_live_content("spotlight", "Card", 2)
-            elif day == 3:
-                ok = self.post_live_content("violence_tweet", "Versus", 3)
-            elif day == 4:
-                ok = self.post_parlays()
-            elif day == 5:
-                ok = self.post_live_content("betting_tweet", "Versus", 15)
+            else:
+                if days_until >= 1 and not self._already_posted(kick_uid):
+                    ok = self._kickoff_tweet(ename) and ok
+                if days_until == 4:
+                    ok = self.post_live_content("analysis_tweet", "Versus", 3) and ok
+                elif days_until == 3:
+                    ok = self.post_live_content("spotlight", "Card", 2) and ok
+                elif days_until == 2:
+                    ok = self.post_live_content("violence_tweet", "Versus", 3) and ok
+                elif days_until == 1:
+                    ok = self.post_parlays() and ok
+                elif days_until <= 0:
+                    ok = self.post_live_content("betting_tweet", "Versus", 15) and ok
         else:
             ok = self.post_spotlight_file()
 

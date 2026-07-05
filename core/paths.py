@@ -22,18 +22,26 @@ ASSETS_DIR = os.path.join(PROJECT_ROOT, "assets")
 OUTPUT_DIR = os.path.join(PROJECT_ROOT, "output")
 VISUALS_DIR = os.path.join(OUTPUT_DIR, "visuals")
 
+_LEGACY_WARNED = set()
+
+
 def get_data_path(filename):
     """Get path to data file with fallback to root"""
     # Try new location first
     new_path = os.path.join(DATA_DIR, filename)
     if os.path.exists(new_path):
         return new_path
-    
-    # Fallback to root (legacy compatibility)
+
+    # Fallback to root (legacy compatibility) — warn loudly: a leftover root
+    # file can silently feed STALE data into the pipeline.
     root_path = os.path.join(PROJECT_ROOT, filename)
     if os.path.exists(root_path):
+        if filename not in _LEGACY_WARNED:
+            _LEGACY_WARNED.add(filename)
+            print(f"⚠️ LEGACY PATH: reading '{filename}' from project root instead of data/. "
+                  f"Move it to data/ — root copies can be stale.")
         return root_path
-    
+
     # Return new path for creation
     return new_path
 

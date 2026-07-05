@@ -9,7 +9,12 @@ FightIQ/
 │   ├── main.py                   # Pipeline orchestrator (V2.2) — FIGHT WEEK + IDLE routing
 │   ├── config.py                 # All thresholds, model names, brand colors, font paths
 │   ├── paths.py                  # Centralized path resolver (use this, not os.path.join)
+│   ├── naming.py                 # Canonical visual filename sanitizer (Card_/Radar_/Versus_/Reel_)
+│   ├── pipeline_meta.py          # Stage stamping + stale-input guards (stamp_stage/require_fresh_stage)
 │   ├── notifier.py               # Discord webhook alerts
+│   ├── twitter_client.py         # Unified poster: tweepy (official) / twikit (cookies), poll support
+│   ├── fighter_rating.py         # Matchup-relative bars + compute_streaks
+│   ├── parlay_logic.py           # Shared slip helpers (pick matching, combined odds)
 │   └── odds_converter.py         # Decimal ↔ American odds format converter
 ├── modules/
 │   ├── _00_indexer.py            # Rebuilds fighters_db.json from UFCStats (run once)
@@ -27,7 +32,8 @@ FightIQ/
 │   ├── _10_matchup_video_bridge.py # Connects 3_results.json → video engine
 │   ├── _11_trend_hunter.py       # Sherdog RSS scraper for trending fighters
 │   ├── _12_background_forge.py   # Imagen AI background generation + cache
-│   └── _13_live_wire.py          # Fight night: polls UFC Stats, posts reactions
+│   ├── _13_live_wire.py          # Fight night: polls UFC Stats, posts reactions
+│   └── _14_scorecard.py          # Post-event: scores predictions vs results → recap tweet + ledger
 ├── data/                         # Runtime data (gitignored except fighters_db.json)
 ├── output/visuals/               # Generated images + videos
 ├── assets/
@@ -35,18 +41,21 @@ FightIQ/
 │   ├── images_cache/             # Cached fighter portrait PNGs
 │   └── backgrounds/              # Imagen-generated background cache
 ├── tools/
+│   ├── healthcheck.py            # Post-pipeline coverage check (odds/AI/visuals/credentials)
 │   ├── check_models.py           # Lists available Gemini models via live API call
 │   ├── list_models_raw.py        # Raw model list dump
 │   ├── test_imports.py           # Verifies all modules import cleanly
 │   ├── verify_odds.py            # Quick odds scraper sanity check
 │   ├── verify_odds_scraper.py    # Full Betist + BFO scraper validation
-│   ├── test_odds_sources.py      # Tests both odds sources independently
-│   ├── debug_betist_live.py      # Live Betist API debug/inspection
-│   ├── debug_odds_deep_scan.py   # Deep scan of BFO odds pages
+│   ├── verify_twitter_api.py     # Twitter credential check
+│   ├── audit_betting_system.py   # Betting pipeline audit
+│   ├── prefetch_fighter_images.py # Multi-source portrait prefetch
+│   ├── setup_twitter_cookies.py  # twikit cookie bootstrap
+│   ├── show_tweets.py / check_data.py # Inspection helpers
 │   ├── test_complete_extraction.py # End-to-end odds extraction test
-│   ├── simple_odds_test.py       # Minimal odds connectivity test
 │   └── test_imagen.py            # Imagen API connectivity test
 └── tests/
+    ├── test_units.py             # PYTEST unit tests (naming, streaks, parlay logic) — runs in CI
     ├── simulate_week.py          # Generates mock week of IDLE content
     ├── test_idle_modes.py        # Validates day→mode mapping
     ├── test_full_cycle.py        # Integration test (no API calls)
@@ -55,6 +64,21 @@ FightIQ/
     ├── test_notifier.py          # Discord notifier unit test
     └── debug_bfo_detail_page.py  # BestFightOdds detail page scraper debug
 ```
+
+---
+
+## Pipeline Safety (stale-input guards)
+
+Every producer stamps its stage in `data/pipeline_meta.json` via
+`core.pipeline_meta.stamp_stage()`; consumers call `require_fresh_stage()` /
+`check_stage_fresh()` and abort (exit 1) when the input is missing, older than
+`PIPELINE_STAGE_MAX_AGE_HOURS`, or stamped for a different event. The Social
+Director additionally refuses to post LIVE content when `3_results` is stale
+and skips `spotlight_ready.json` files older than 20h. Event Radar writes
+`status: ERROR` (and exits 1) instead of leaving a stale card behind.
+
+All generated visuals use ONE sanitizer: `core.naming.safe_filename()`.
+Never build a `Card_/Radar_/Versus_/Reel_` filename by hand.
 
 ---
 
@@ -85,24 +109,26 @@ UFCStats.com → [01_event_radar] → 1_card.json
 ## Key Configuration (`core/config.py`)
 
 ```python
-# AI Models (in priority order — confirmed working 2026-03-26)
+# AI Models (in priority order — confirmed working 2026-05-14)
 GEMINI_MODELS = [
     "models/gemini-3.1-pro-preview",   # PRIMARY (God Mode)
     "models/gemini-2.5-pro",           # SECONDARY
-    "models/gemini-2.5-flash",         # TERTIARY
-    "models/gemini-2.0-flash",         # QUATERNARY
-    "models/gemini-2.0-flash-lite",    # ULTIMATE FALLBACK
+    "models/gemini-2.5-flash",         # FALLBACK
 ]
 
-# Image Generation
-IMAGEN_MODEL = "models/imagen-4.0-generate-preview-06-06"
+# Image Generation (override with env FIGHTIQ_IMAGEN_MODEL)
+IMAGEN_MODEL = "imagen-3.0-generate-002"  # + fallbacks in IMAGEN_MODEL_FALLBACKS
 
 # Parlay thresholds
-PARLAY_SAFE_CONFIDENCE = 8    # Min AI confidence score (0-10)
-PARLAY_VIOLENCE_SCORE = 80    # Min violence score (0-100)
+PARLAY_SAFE_CONFIDENCE = 7    # Min AI confidence score (0-10), fallback 6
+PARLAY_VIOLENCE_SCORE = 75    # Min violence score (0-100), fallback 65
 
-# Odds scraper
-BETIST_REDIRECT_URL = "https://cutt.ly/zrIT6E9d"  # Update if Betist changes domain
+# Odds scraper (override with env BETIST_REDIRECT_URL if the shortlink dies)
+BETIST_REDIRECT_URL = "https://cutt.ly/zrIT6E9d"
+
+# Pipeline safety
+PIPELINE_STAGE_MAX_AGE_HOURS = 36   # Stale-input guard threshold
+POSTED_HISTORY_MAX_ENTRIES = 400    # posted_history.json cap
 
 # Brand colors
 BRAND_COLORS = {"primary": "#00FF41", "secondary": "#FFD700", "accent": "#FF0055", ...}
