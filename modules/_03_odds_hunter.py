@@ -100,31 +100,56 @@ class BetistEngine:
             pass
         return False
 
+    def _candidate_hosts(self, host):
+        """Expand a user-given host into API-host candidates.
+
+        The address bar shows the marketing domain (betist1818.com) but the
+        getdata.php API lives on the `bet.` subdomain. Accept either form.
+        """
+        host = host.replace("https://", "").replace("http://", "").strip("/").lower()
+        if not host:
+            return []
+        host = host.split("/")[0]
+        cands = [host]
+        if not host.startswith("bet."):
+            cands.append("bet." + host)
+        # If given bet.X, also keep bare X as a fallback
+        if host.startswith("bet."):
+            cands.append(host[4:])
+        seen, out = set(), []
+        for c in cands:
+            if c and c not in seen:
+                seen.add(c)
+                out.append(c)
+        return out
+
     def _try_domain(self, host):
         """Validate a candidate domain by actually pulling the UFC event list.
 
         A domain only counts as active if getdata.php returns real event HTML
         (openAdditional handlers) — NOT just a 200 to HEAD /. This is what
         stops the scanner from locking onto a parked stub or the BTK block
-        page. On success, self.fighter_to_id is populated as a side effect.
+        page. Tries both the bare and `bet.` subdomain forms. On success,
+        self.fighter_to_id is populated as a side effect.
         """
-        host = host.replace("https://", "").replace("http://", "").strip("/")
-        if not host or self._host_is_blocked(host):
-            return False
-        self.base_domain = host
-        self.base_url = f"https://{host}/getdata.php"
-        self.session.headers['Referer'] = f"https://{host}/"
         if not self.active_league_id:
             self.find_ufc_league_id()
-        try:
-            if self.fetch_event_list():
-                logger.info(f"Active Betist domain confirmed (serves UFC data): {host}")
-                return True
-        except Exception as e:
-            logger.debug(f"Betist candidate {host} failed: {type(e).__name__}: {str(e)[:60]}")
-        # Reset so a failed candidate doesn't leave a half-set base_url
-        self.base_domain = self.base_url = None
-        self.fighter_to_id = {}
+
+        for cand in self._candidate_hosts(host):
+            if self._host_is_blocked(cand):
+                continue
+            self.base_domain = cand
+            self.base_url = f"https://{cand}/getdata.php"
+            self.session.headers['Referer'] = f"https://{cand}/"
+            try:
+                if self.fetch_event_list():
+                    logger.info(f"Active Betist domain confirmed (serves UFC data): {cand}")
+                    return True
+            except Exception as e:
+                logger.debug(f"Betist candidate {cand} failed: {type(e).__name__}: {str(e)[:60]}")
+            # Reset so a failed candidate doesn't leave a half-set base_url
+            self.base_domain = self.base_url = None
+            self.fighter_to_id = {}
         return False
 
     def resolve_current_domain(self):
@@ -156,15 +181,16 @@ class BetistEngine:
         except Exception as e:
             logger.debug(f"Mirror probe failed: {e}")
 
-        # 2) Brute scan — validate getdata.php, not just HEAD /
-        for num in range(1500, 1800):
+        # 2) Brute scan — validate getdata.php, not just HEAD /.
+        #    Range widened (current live number 1818 was outside the old window).
+        for num in range(1500, 2100):
             domain = f"bet.betist{num}.com"
             try:
                 r = self.session.head(
                     f"https://{domain}/",
                     timeout=4, allow_redirects=True, verify=False
                 )
-                if r.status_code == 200 and self._try_domain(domain):
+                if r.status_code == 200 and not self._host_is_blocked(domain) and self._try_domain(domain):
                     return True
             except Exception:
                 continue
