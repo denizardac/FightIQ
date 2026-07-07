@@ -62,8 +62,13 @@ except Exception:
 class BetistEngine:
     """Primary odds source - Dynamic Turkish betting site (API-BASED)"""
     
+    # Turkish BTK block-page sinkhole — a blocked domain resolves here and
+    # answers HEAD / with 200, which used to fool the scanner into locking
+    # onto the block page instead of the real betting API.
+    BTK_BLOCK_IPS = ("195.175.254.",)
+
     def __init__(self):
-        self.fighter_to_id = {} 
+        self.fighter_to_id = {}
         self.base_domain = None
         self.base_url = None
         self.active_league_id = None
@@ -76,31 +81,82 @@ class BetistEngine:
         }
         self.session.headers.update(self.headers)
 
-    def resolve_current_domain(self):
-        """Scan Betist domains directly (cutt.ly redirect is dead).
+        # Optional proxy (e.g. a Turkish residential proxy) so a datacenter /
+        # geo-blocked host can still reach Betist. Format: http://user:pass@host:port
+        proxy = (os.environ.get("BETIST_PROXY") or "").strip()
+        if proxy:
+            self.session.proxies = {"http": proxy, "https": proxy}
+            logger.info("Betist: routing through BETIST_PROXY")
 
-        Strategy: first try the cutt.ly mirror (returns a 30x with Location),
-        then probe a wide numeric range. We cache the latest working number
-        across runs so we don't waste 100 HEADs every cycle.
+    def _host_is_blocked(self, host):
+        """True if the host resolves to the BTK block sinkhole."""
+        try:
+            import socket
+            ip = socket.gethostbyname(host)
+            if any(ip.startswith(p) for p in self.BTK_BLOCK_IPS):
+                logger.warning(f"Betist: {host} is DNS-blocked (BTK sinkhole {ip}) — skipping")
+                return True
+        except Exception:
+            pass
+        return False
+
+    def _try_domain(self, host):
+        """Validate a candidate domain by actually pulling the UFC event list.
+
+        A domain only counts as active if getdata.php returns real event HTML
+        (openAdditional handlers) — NOT just a 200 to HEAD /. This is what
+        stops the scanner from locking onto a parked stub or the BTK block
+        page. On success, self.fighter_to_id is populated as a side effect.
         """
-        logger.info("Scanning for active Betist domain...")
+        host = host.replace("https://", "").replace("http://", "").strip("/")
+        if not host or self._host_is_blocked(host):
+            return False
+        self.base_domain = host
+        self.base_url = f"https://{host}/getdata.php"
+        self.session.headers['Referer'] = f"https://{host}/"
+        if not self.active_league_id:
+            self.find_ufc_league_id()
+        try:
+            if self.fetch_event_list():
+                logger.info(f"Active Betist domain confirmed (serves UFC data): {host}")
+                return True
+        except Exception as e:
+            logger.debug(f"Betist candidate {host} failed: {type(e).__name__}: {str(e)[:60]}")
+        # Reset so a failed candidate doesn't leave a half-set base_url
+        self.base_domain = self.base_url = None
+        self.fighter_to_id = {}
+        return False
+
+    def resolve_current_domain(self):
+        """Find a Betist domain that actually serves the UFC event list.
+
+        Priority: (1) BETIST_DOMAIN env — pin the exact domain you see in your
+        browser; (2) cutt.ly mirror; (3) brute numeric scan. Every candidate
+        is validated against getdata.php, so block/parked pages are rejected.
+        """
+        logger.info("Resolving active Betist domain...")
         import urllib3
         urllib3.disable_warnings()
 
-        # 1) Try cutt.ly mirror — owners update it when they rotate
+        # 0) Explicit pin — most reliable. Set BETIST_DOMAIN to the host you
+        #    see in the browser address bar (e.g. bet.betist1712.com).
+        pinned = (os.environ.get("BETIST_DOMAIN") or "").strip()
+        if pinned:
+            if self._try_domain(pinned):
+                return True
+            logger.warning(f"BETIST_DOMAIN='{pinned}' did not serve UFC data "
+                           f"(blocked from this host, or wrong/stale number).")
+
+        # 1) cutt.ly mirror — owners update it when they rotate
         try:
             r = self.session.head(BETIST_REDIRECT_URL, allow_redirects=True, timeout=8, verify=False)
             final_host = (r.url or "").split("/")[2] if r.url and "://" in r.url else ""
-            if final_host and "betist" in final_host:
-                self.base_domain = final_host
-                self.base_url = f"https://{final_host}/getdata.php"
-                self.session.headers['Referer'] = f"https://{final_host}/"
-                logger.info(f"Active Betist domain via mirror: {final_host}")
+            if final_host and "betist" in final_host and self._try_domain(final_host):
                 return True
         except Exception as e:
             logger.debug(f"Mirror probe failed: {e}")
 
-        # 2) Brute scan a generous numeric window
+        # 2) Brute scan — validate getdata.php, not just HEAD /
         for num in range(1500, 1800):
             domain = f"bet.betist{num}.com"
             try:
@@ -108,16 +164,14 @@ class BetistEngine:
                     f"https://{domain}/",
                     timeout=4, allow_redirects=True, verify=False
                 )
-                if r.status_code == 200:
-                    self.base_domain = domain
-                    self.base_url = f"https://{domain}/getdata.php"
-                    self.session.headers['Referer'] = f"https://{domain}/"
-                    logger.info(f"Active Betist domain found: {domain}")
+                if r.status_code == 200 and self._try_domain(domain):
                     return True
             except Exception:
                 continue
 
-        logger.error("No active Betist domain found (1500-1799 scanned)")
+        logger.error("No active Betist domain found. If Betist works in your "
+                     "browser, set BETIST_DOMAIN=<that host> (and BETIST_PROXY "
+                     "if the server is geo-blocked).")
         return False
 
     def find_ufc_league_id(self):
