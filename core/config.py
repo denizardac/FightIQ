@@ -39,8 +39,9 @@ MAX_CANDIDATE_PAIRS = 10           # For ORACLE/ANOMALY modes
 # BETIST (LIVE ODDS) SETTINGS
 # ==========================================
 
-# Override with env var when the shortlink dies (single point of failure)
-BETIST_REDIRECT_URL = os.environ.get("BETIST_REDIRECT_URL", "https://cutt.ly/zrIT6E9d")
+# Redirect that always points to Betist's current live domain (auto-discovery).
+# dub.sh/betist 302s to the current betistXXXX.com; override if it ever dies.
+BETIST_REDIRECT_URL = os.environ.get("BETIST_REDIRECT_URL", "https://dub.sh/betist")
 BETIST_KNOWN_LEAGUE_IDS = ["41875249", "41875250", "30582", "41875251"]
 BETIST_REQUEST_TIMEOUT = 15
 BETIST_RETRY_DELAY = 2             # Seconds between retries

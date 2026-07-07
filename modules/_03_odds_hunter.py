@@ -35,7 +35,7 @@ INPUT_FILE = get_data_path("2_data.json")
 OUTPUT_FILE = get_data_path("2_data_with_odds.json")
 
 # Betist configuration (Primary Source) — env/config override supported
-BETIST_REDIRECT_URL = getattr(config, "BETIST_REDIRECT_URL", "https://cutt.ly/zrIT6E9d")
+BETIST_REDIRECT_URL = getattr(config, "BETIST_REDIRECT_URL", "https://dub.sh/betist")
 
 # BestFightOdds configuration (Secondary Source - FALLBACK)
 BESTFIGHTODDS_BASE = "https://www.bestfightodds.com"
@@ -172,12 +172,22 @@ class BetistEngine:
             logger.warning(f"BETIST_DOMAIN='{pinned}' did not serve UFC data "
                            f"(blocked from this host, or wrong/stale number).")
 
-        # 1) cutt.ly mirror — owners update it when they rotate
+        # 1) Redirect mirror (dub.sh/betist) — always points to the current
+        #    live domain, so this auto-tracks rotations with no manual update.
         try:
-            r = self.session.head(BETIST_REDIRECT_URL, allow_redirects=True, timeout=8, verify=False)
-            final_host = (r.url or "").split("/")[2] if r.url and "://" in r.url else ""
-            if final_host and "betist" in final_host and self._try_domain(final_host):
-                return True
+            hosts = []
+            # First hop Location (before we chase into the betting site)
+            r0 = self.session.get(BETIST_REDIRECT_URL, allow_redirects=False, timeout=8, verify=False)
+            loc = r0.headers.get("Location", "")
+            if "://" in loc:
+                hosts.append(loc.split("/")[2])
+            # Also the fully-followed final host, as a backup
+            r = self.session.get(BETIST_REDIRECT_URL, allow_redirects=True, timeout=10, verify=False)
+            if r.url and "://" in r.url:
+                hosts.append(r.url.split("/")[2])
+            for host in hosts:
+                if host and "betist" in host and self._try_domain(host):
+                    return True
         except Exception as e:
             logger.debug(f"Mirror probe failed: {e}")
 
