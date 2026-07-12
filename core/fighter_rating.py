@@ -143,15 +143,31 @@ def compute_matchup_bars(scout1: dict, scout2: dict, deep1: dict, deep2: dict) -
     }
 
 
-def style_one_liner(scout: dict, deep: dict) -> str:
-    """Deterministic 3–4 word style tag from stats."""
+def style_one_liner(scout: dict, deep: dict, exclude: str = None) -> str:
+    """Deterministic 3–4 word style tag from stats.
+
+    exclude: a tag already used by the opponent — both fighters carrying
+    "Volume Striker" on the same card told the reader nothing. When the top
+    archetype collides, fall through to the next-best fitting one.
+    """
     r = _raw_dimensions(scout, deep)
+    ranked = []
     if r["grappling"] > r["striking"] + 8 and r["grappling"] > 55:
-        return "Grappling Threat"
+        ranked.append("Grappling Threat")
     if r["power"] > 58 and r["striking"] > 50:
-        return "Power Striker"
+        ranked.append("Power Striker")
     if r["striking"] > 58:
-        return "Volume Striker"
+        ranked.append("Volume Striker")
     if r["cardio"] > 58:
-        return "Pressure Fighter"
-    return "Balanced Scrapper"
+        ranked.append("Pressure Fighter")
+    # Secondary archetypes so an excluded primary still has alternatives
+    if r["power"] > 52:
+        ranked.append("Heavy Hands")
+    if r["grappling"] > 50:
+        ranked.append("Mat Technician")
+    ranked.append("Balanced Scrapper")
+
+    for tag in ranked:
+        if not exclude or tag.lower() != exclude.lower():
+            return tag
+    return ranked[0]

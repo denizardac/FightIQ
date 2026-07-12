@@ -78,7 +78,50 @@ and skips `spotlight_ready.json` files older than 20h. Event Radar writes
 `status: ERROR` (and exits 1) instead of leaving a stale card behind.
 
 All generated visuals use ONE sanitizer: `core.naming.safe_filename()`.
-Never build a `Card_/Radar_/Versus_/Reel_` filename by hand.
+Never build a `Card_/Radar_/Versus_/Reel_/Pick_` filename by hand.
+
+---
+
+## Betting-Odds Honesty (never invent a price)
+
+- `core/odds_resolve.py` treats the scraped **board as authoritative**. The
+  model's quoted price is accepted only when it matches a real board price
+  within ±5% (`AI_ODDS_BOARD_TOLERANCE`); otherwise the pick resolves against
+  the board or falls back to the winner's ML. No board price → `odds_available:
+  False` and the betting tweet is left **blank** (never published).
+- Every published price is stamped with `odds_source` (Betist / BestFightOdds /
+  …). `tools/healthcheck.py::check_content_safety()` flags any priced pick with
+  no source as a possible invented-odds leak.
+- Internal metric names (`ranking_proxy`, `injury_news_flag`, …) are scrubbed
+  from all tweet text by `prediction_validate.scrub_internal_terms()`.
+
+## Published-Pick Honesty (Live Wire + Scorecard)
+
+- The Social Director writes `data/published_picks.json` when a betting tweet
+  actually goes out (bet, bet_type, odds, predicted winner/method, whether the
+  Pick card — and thus the confidence number — was published).
+- Fight-night reactions (`_13_live_wire`) and the recap (`_14_scorecard`) may
+  only claim "we called it" for picks recorded there. `evaluate_published_pick`
+  grades the PUBLISHED bet against the real result into FULL_WIN / WINNER_ONLY /
+  LOSS / NO_PICK, and the reaction template is chosen in code — no more "CASH
+  IT" on a bet that lost, no confidence numbers that were never published.
+- Live Wire runs a 12h window (18:00→06:00 UTC) and exits early once every
+  fight has a result, so the main event is always covered. The scorecard only
+  posts at ≥90% card coverage (`SCORECARD_MIN_COVERAGE`) and states partial
+  coverage explicitly ("11 of 13 fights scored").
+
+## Visual outputs (`output/visuals/`)
+
+`Versus_*` (stat tale-of-tape) · `Pick_*` (AI PICK card: winner/method/
+confidence bar/verified-odds/edge) · `Card_*` (single-fighter) · `Radar_*` ·
+`Ticket_{Safe,Violence,Value}.png` · `Reel_*` (video). Betting tweets carry
+**two** images: the Pick card then the Versus card.
+
+## Runtime data files
+
+`published_picks.json` (claim ledger) · `content_hashes.json` (7-day repeat
+lock) · `prediction_ledger.json` (all-time accuracy, git-persisted) ·
+`pipeline_meta.json` (stage stamps).
 
 ---
 

@@ -101,6 +101,50 @@ def check_card_coverage():
     return issues
 
 
+def check_content_safety():
+    """Pre-publication consistency checks (Phase 6 guard layer).
+
+    - unsourced_odds: a published-ready price with no scraper source stamp
+      (the invented-odds signature)
+    - duplicate_spotlight: spotlight_ready text was already posted on an
+      earlier day (repeat-content signature)
+    - inactive_spotlight: spotlight fighter hasn't fought in ~24 months
+    """
+    import hashlib
+    from datetime import datetime
+
+    issues = {"unsourced_odds": [], "duplicate_spotlight": False,
+              "inactive_spotlight": None}
+
+    brain = _load("3_results.json") or []
+    for item in brain if isinstance(brain, list) else []:
+        angles = (item.get("fight_brain_output") or {}).get("betting_angles") or {}
+        for key in ("safe_pick", "value_pick", "violence_pick"):
+            a = angles.get(key) or {}
+            if a.get("odds_available") and (a.get("odds_source") in (None, "", "unknown")):
+                issues["unsourced_odds"].append(f"{item.get('matchup','?')}:{key}")
+
+    spotlight = _load("spotlight_ready.json") or {}
+    thread = spotlight.get("thread") or []
+    if thread:
+        h = hashlib.sha256(str(thread[0]).strip().lower().encode()).hexdigest()[:16]
+        hashes = _load("content_hashes.json") or {}
+        seen = hashes.get(h)
+        today = datetime.today().strftime("%Y-%m-%d")
+        if seen and seen != today:
+            issues["duplicate_spotlight"] = True
+
+    lfy = spotlight.get("last_fight_year")
+    if lfy:
+        try:
+            if int(lfy) < datetime.today().year - 2:
+                issues["inactive_spotlight"] = f"{spotlight.get('fighter')} (last fight {lfy})"
+        except (TypeError, ValueError):
+            pass
+
+    return issues
+
+
 def check_live_wire_readiness():
     """Preflight for fight-night Live Wire (scraping + Twitter)."""
     from datetime import datetime, timedelta
@@ -172,8 +216,21 @@ def main():
     issues = check_card_coverage()
     if issues.get("skipped"):
         print(f"   ℹ️  Skipped: {issues['reason']}")
+        # Content-safety still matters in IDLE mode (duplicate/retired
+        # spotlight content is exactly an IDLE-mode failure)
+        safety = check_content_safety()
+        idle_hits = 0
+        if safety["duplicate_spotlight"]:
+            idle_hits += 1
+            print("   🚨 DUPLICATE SPOTLIGHT: today's content matches an earlier post")
+        if safety["inactive_spotlight"]:
+            idle_hits += 1
+            print(f"   🚨 INACTIVE FIGHTER in spotlight queue: {safety['inactive_spotlight']}")
+        if not idle_hits:
+            print("   ✅ Content safety: no repeats, no retired picks")
         print("=" * 60 + "\n")
-        return 0 if lw.get("gemini_key") and lw.get("twitter_ready") else 1
+        base_ok = lw.get("gemini_key") and lw.get("twitter_ready")
+        return (0 if base_ok else 1) + 2 * min(1, idle_hits)
 
     total = issues["fights_total"]
     coverage = {
@@ -197,6 +254,23 @@ def main():
         if issues[key]:
             print(f"   📋 {key}: {issues[key]}")
 
+    # ── Content-safety guard layer (invented odds / repeats / retired picks) ──
+    safety = check_content_safety()
+    safety_hits = 0
+    if safety["unsourced_odds"]:
+        safety_hits += 1
+        print(f"   🚨 UNSOURCED ODDS (possible invented prices): "
+              f"{len(safety['unsourced_odds'])} — {safety['unsourced_odds'][:4]}")
+    if safety["duplicate_spotlight"]:
+        safety_hits += 1
+        print("   🚨 DUPLICATE SPOTLIGHT: today's content matches an earlier post")
+    if safety["inactive_spotlight"]:
+        safety_hits += 1
+        print(f"   🚨 INACTIVE FIGHTER in spotlight queue: {safety['inactive_spotlight']}")
+    if not safety_hits:
+        print("   ✅ Content safety: odds sourced, no repeats, no retired picks")
+    issues["content_safety"] = safety
+
     snapshot_path = get_data_path("healthcheck.json")
     try:
         with open(snapshot_path, "w") as f:
@@ -210,6 +284,8 @@ def main():
     severity = sum(1 for k in ("missing_odds", "missing_ai_brain") if issues[k])
     if not lw.get("gemini_key") or not lw.get("twitter_ready"):
         severity += 1
+    # Content-safety findings push severity to the Discord-alert threshold
+    severity += 2 * min(1, safety_hits)
     return severity
 
 

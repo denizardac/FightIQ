@@ -87,22 +87,25 @@ def _odds_to_decimal(val):
 
 
 def _load_markets_by_matchup():
+    """Returns (markets_by_key, source_by_key) so legs carry an odds_source stamp."""
     out = {}
+    sources = {}
     path = MARKETS_FILE
     if not os.path.exists(path):
-        return out
+        return out, sources
     try:
         with open(path, "r", encoding="utf-8") as f:
             fights = json.load(f)
     except Exception:
-        return out
+        return out, sources
     for fight in fights:
         fighters = fight.get("fighters") or []
         if len(fighters) != 2:
             continue
         key = tuple(sorted([fighters[0].strip().lower(), fighters[1].strip().lower()]))
         out[key] = fight.get("market_data") or {}
-    return out
+        sources[key] = fight.get("odds_source_primary") or "unknown"
+    return out, sources
 
 
 def _moneyline_map(market_data):
@@ -310,7 +313,7 @@ def main():
         print(f"❌ '{INPUT_FILE}' not found or invalid JSON. Run step 5 first.")
         sys.exit(1)
 
-    markets_by = _load_markets_by_matchup()
+    markets_by, sources_by = _load_markets_by_matchup()
     rows = []
 
     for item in results:
@@ -349,6 +352,12 @@ def main():
     safe_slip = _build_safe_candidates(safe_primary or safe_fallback, markets_by)
     violence_slip = _build_violence_candidates(viol_primary or viol_fallback, markets_by)
     value_slip = _build_value_candidates(rows, markets_by)
+
+    # Source stamp on every leg — traceability for healthcheck
+    for slip in (safe_slip, violence_slip, value_slip):
+        for leg in slip:
+            key = _norm_matchup_key(leg.get("match", ""))
+            leg["odds_source"] = sources_by.get(key, "unknown")
 
     parlays = {
         "safe_slip": safe_slip,

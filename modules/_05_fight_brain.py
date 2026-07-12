@@ -185,6 +185,8 @@ def _extract_scout_data(deep_list, stats_list, f1, f2):
             "last_5_results":  last_5,
             "win_streak":      win_streak,
             "loss_streak":     loss_streak,
+            # Guardrail flag: <4 fights = per-min/percentage stats are noise
+            "small_sample":    (ds.get('total_fights') or 0) < 4,
         }
 
     return scout(f1, d1, s1), scout(f2, d2, s2)
@@ -244,8 +246,14 @@ CRITICAL RULES:
 4. violence_pick = Over/Under rounds OR distance market aligned with violence_score (finishes vs decision).
 5. Each pick MUST include bet_type: ml | ko | sub | dec | over | under | distance_yes | distance_no
 6. If a method/rounds line offers better value than ML, USE IT for value_pick and say so in betting_tweet.
-7. Confidence 1–10: 8+ only when stats + market align. Cite numbers (SLpM, TD%, ranking_proxy, injury flags).
+7. Confidence 1–10: 8+ only when stats + market align. Cite public numbers (SLpM, TD%, reach, age).
 8. Do NOT invent odds — copy from AVAILABLE MARKETS or use 0.0.
+9. NEVER use internal metric names in tweet text: "ranking_proxy", "ranking proxy",
+   "injury_news_flag", "finish_rate_pct", "win_rate_pct" are INTERNAL — translate to
+   plain English ("proven level of competition", "injury concerns") or omit.
+10. SMALL SAMPLE RULE: if a fighter's total_fights < 4, their per-minute/percentage
+    stats are early-career noise. Either skip those numbers in tweets or qualify them
+    ("in a short sample"). Never call tiny-sample stats "absurd"/"insane"/"elite".
 
 ═══════════════════════════════════════════════════
 MATCHUP: {f1.upper()} vs {f2.upper()}
@@ -278,8 +286,8 @@ Use ALL provided data. Key factors to consider:
 - Age and career trajectory (decline after ~33 for most fighters)
 - Last 5 results for momentum and psychological state
 - Line movement direction (sharp money vs public betting)
-- KO/Sub rates, finish_rate_pct, ranking_proxy (experience/quality proxy)
-- injury_news_flag in scout data — downgrade confidence if True for your pick
+- KO/Sub rates and opponent quality (internal fields — never name them in tweets)
+- injury_news_flag in scout data — downgrade confidence if True for your pick (but never print the flag name)
 - Reach / stance / momentum from MATCHUP CONTEXT
 - Opponent quality via win_rate_pct and total_fights
 
@@ -350,6 +358,7 @@ Return ONLY this JSON object:
             output, f1, f2,
             market if isinstance(market, dict) else {},
             scout1, scout2,
+            odds_source=fight_data.get('odds_source_primary') or "unknown",
         )
         # Deterministic bars for visuals (no AI 96 vs 49)
         d0 = deep[0] if isinstance(deep, list) and len(deep) > 0 else {}
@@ -357,14 +366,16 @@ Return ONLY this JSON object:
         bars = compute_matchup_bars(scout1, scout2, d0, d1)
         winner = output.get("prediction", {}).get("winner", f1)
         output["computed_ratings"] = bars
+        tag1 = style_one_liner(scout1, d0)
+        tag2 = style_one_liner(scout2, d1, exclude=tag1)  # never mirror the opponent's tag
         output["spotlight_stats"] = {
             f1: {
                 **bars["fighter1"],
-                "one_liner": style_one_liner(scout1, d0),
+                "one_liner": tag1,
             },
             f2: {
                 **bars["fighter2"],
-                "one_liner": style_one_liner(scout2, d1),
+                "one_liner": tag2,
             },
         }
         return output

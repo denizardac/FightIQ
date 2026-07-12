@@ -104,7 +104,11 @@ def get_gemini_model():
     # Return initialized client
     return client
 
-def scrape_fighter_detailed(url):
+def scrape_fighter_detailed(url, require_active=True):
+    """Scrape a fighter page. By default REJECTS inactive fighters (no fight
+    in the last ~24 months) — the bot once ran a 'grab the value' bet post on
+    two long-retired fighters for 17 days straight. HISTORY mode passes
+    require_active=False because throwbacks are intentionally old-school."""
     if not url:
         return None
     resp = None
@@ -268,6 +272,14 @@ def scrape_fighter_detailed(url):
             if data['name'].lower() in HIGH_TIER_ACTIVE:
                 data['last_fight_year'] = 2024  # Assume active
 
+        # ACTIVITY GATE (default on): last fight within ~24 months
+        if require_active:
+            import datetime as _dt
+            cutoff_year = _dt.datetime.now().year - 2
+            lfy = data.get('last_fight_year')
+            if not lfy or lfy < cutoff_year:
+                return None
+
         return data
     except Exception: return None
 
@@ -413,36 +425,54 @@ def generate_anomaly_content(fighter1, fighter2, odds_val, stat_note):
     client = get_gemini_model()
     if not client: return None
 
-    # Distinguish between live odds and statistical-only anomaly
+    # Distinguish between live odds and statistical-only anomaly.
+    # HONESTY RULE: betting language ("value", "wolf ticket", "grab it") is
+    # ONLY allowed when a real market price exists. A stat quirk with no
+    # priced line must read as pure analysis, never as a bet recommendation.
     has_live_odds = odds_val not in ("N/A (Statistical)", "N/A", None, "")
     if has_live_odds:
-        odds_context = f"LIVE ODDS: {fighter1['name']} is paying {odds_val} (underdog/value)."
-        tweet_hook = f"The books have {fighter1['name']} at {odds_val}. The stats say that's wrong."
-        stat_hook = f"At {odds_val}, the implied probability is off. Value detected."
-    else:
-        odds_context = f"No live odds available. This is a pure STATISTICAL anomaly."
-        tweet_hook = f"The stats are screaming value on {fighter1['name']}."
-        stat_hook = f"Pure stat edge: {stat_note}"
-
-    prompt = f"""
+        prompt = f"""
     ROLE: Sharp Sports Bettor / MMA Analyst.
     TASK: Write an engaging value-alert social post for this fighter.
     FIGHTER: {fighter1['name']}
     OPPONENT: {fighter2['name']}
-    {odds_context}
+    LIVE ODDS: {fighter1['name']} is paying {odds_val} (underdog/value).
     STAT INSIGHT: {stat_note}
-    
+
     Write a viral, punchy tweet (max 240 chars) that:
     - Starts with "🚨 WOLF TICKET:" or similar hook
-    - References the actual stat insight naturally (no mention of "N/A")
+    - References the actual stat insight AND the real odds naturally
     - Uses #UFC and one relevant hashtag
-    
+
     OUTPUT ONLY valid JSON:
     {{
         "main_tweet": "<write the main viral tweet here>",
         "stat_reply": "<write a 2nd tweet: the stat breakdown, max 240 chars>",
         "card_stats": {{ "power": 75, "grappling": 75, "stamina": 75, "chin": 80, "technique": 95, "one_liner": "STAT ANOMALY" }},
         "video_script": "12-second script, max 35 words. Build tension: why this fighter is undervalued."
+    }}
+    """
+    else:
+        prompt = f"""
+    ROLE: MMA stats analyst (NOT a bettor — there is NO betting line for this).
+    TASK: Write a stat-nerd social post about a statistical oddity.
+    FIGHTER: {fighter1['name']}
+    OPPONENT: {fighter2['name']}
+    STAT INSIGHT: {stat_note}
+
+    Write a punchy tweet (max 240 chars) that:
+    - Starts with "📊 STAT ODDITY:" or "🔬 NUMBERS DON'T LIE:"
+    - Presents the stat gap as pure analysis
+    - STRICTLY FORBIDDEN words/ideas: value, bet, betting, odds, market, books,
+      ticket, cash, play, underdog price, "grab", "tail". NO betting advice at all.
+    - Uses #UFC and one stats-related hashtag
+
+    OUTPUT ONLY valid JSON:
+    {{
+        "main_tweet": "<write the main tweet here — analysis only, zero betting language>",
+        "stat_reply": "<write a 2nd tweet: the deeper stat breakdown, max 240 chars, analysis only>",
+        "card_stats": {{ "power": 75, "grappling": 75, "stamina": 75, "chin": 80, "technique": 95, "one_liner": "STAT ANOMALY" }},
+        "video_script": "12-second script, max 35 words. Frame it as a fascinating stat story, not a bet."
     }}
     """
     try:
@@ -509,7 +539,7 @@ def main():
     print("--- 🔦 SPOTLIGHT ENGINE ACTIVATED ---")
     
     history = load_history()
-    posted_names = [h['name'] for h in history]
+    posted_names = [str(h.get('name', '')).lower() for h in history]
     fighters_list, urls = load_db()
     
     # 1. GENERATE CANDIDATE LIST (Trends Priority)
@@ -808,7 +838,7 @@ def main():
         
         for name in full_list_shuffled[:config.MAX_FIGHTERS_TO_SCAN]:
             if name in posted_names: continue
-            d = scrape_fighter_detailed(urls[name])
+            d = scrape_fighter_detailed(urls[name], require_active=False)
             if d and d.get('wins', 0) >= config.HISTORY_WINS_THRESHOLD:
                 print(f"   🏛️ Legend Found: {d['name']} ({d['wins']} Wins)")
                 ai_content = generate_history_content(d)
@@ -822,7 +852,7 @@ def main():
             print(f"   🔄 Retry: Lowering threshold to {config.HISTORY_WINS_RELAXED}+ wins...")
             for name in full_list_shuffled[:config.MAX_FIGHTERS_TO_SCAN]:
                 if name in posted_names: continue
-                d = scrape_fighter_detailed(urls[name])
+                d = scrape_fighter_detailed(urls[name], require_active=False)
                 if d and d.get('wins', 0) >= config.HISTORY_WINS_RELAXED:
                     print(f"   🏛️ Veteran Found: {d['name']} ({d['wins']} Wins)")
                     ai_content = generate_history_content(d)
@@ -836,7 +866,7 @@ def main():
             print(f"   🔄 Final retry: Looking for long careers ({config.HISTORY_MIN_WINS}+ wins)...")
             for name in full_list_shuffled:
                 if name in posted_names: continue
-                d = scrape_fighter_detailed(urls[name])
+                d = scrape_fighter_detailed(urls[name], require_active=False)
                 if d and d.get('wins', 0) >= config.HISTORY_MIN_WINS:
                     total_fights = d.get('wins', 0) + d.get('losses', 0)
                     if total_fights >= 25:  # Long career
@@ -852,7 +882,7 @@ def main():
             # Pick fighter with most wins from candidates
             best_wins = 0
             for name in candidates[:50]:
-                d = scrape_fighter_detailed(urls.get(name))
+                d = scrape_fighter_detailed(urls.get(name), require_active=False)
                 if d and d.get('wins', 0) > best_wins:
                     best_wins = d['wins']
                     selected_data = d
@@ -866,7 +896,7 @@ def main():
         # Try 1: Primary threshold from candidates
         for name in candidates:
             if name in posted_names: continue
-            d = scrape_fighter_detailed(urls.get(name))
+            d = scrape_fighter_detailed(urls.get(name), require_active=False)
             if d and float(d.get('slpm', 0)) > config.VIOLENCE_SLPM_THRESHOLD:
                 print(f"   🩸 Violence Candidate: {d['name']} (SLpM: {d['slpm']})")
                 ai_content = generate_violence_content(d)
@@ -881,7 +911,7 @@ def main():
             random.shuffle(fighters_list)
             for name in fighters_list[:config.MAX_FIGHTERS_TO_SCAN]:
                 if name in posted_names: continue
-                d = scrape_fighter_detailed(urls.get(name))
+                d = scrape_fighter_detailed(urls.get(name), require_active=False)
                 if d and float(d.get('slpm', 0)) > config.VIOLENCE_SLPM_RELAXED:
                     print(f"   🩸 Violence Found: {d['name']} (SLpM: {d['slpm']})")
                     ai_content = generate_violence_content(d)
@@ -894,7 +924,7 @@ def main():
         if not found_violence:
             print(f"   🔄 Final retry: Minimum threshold {config.VIOLENCE_MIN_SLPM}...")
             for name in fighters_list[:config.MAX_FIGHTERS_TO_SCAN]:
-                d = scrape_fighter_detailed(urls.get(name))
+                d = scrape_fighter_detailed(urls.get(name), require_active=False)
                 if d and float(d.get('slpm', 0)) > config.VIOLENCE_MIN_SLPM:
                     print(f"   🩸 Brawler Found: {d['name']} (SLpM: {d['slpm']})")
                     ai_content = generate_violence_content(d)
@@ -908,7 +938,7 @@ def main():
             # Pick highest SLpM from all candidates
             best_slpm = 0.0
             for name in candidates[:50]:
-                d = scrape_fighter_detailed(urls.get(name))
+                d = scrape_fighter_detailed(urls.get(name), require_active=False)
                 if d:
                     slpm = float(d.get('slpm', 0))
                     if slpm > best_slpm:
@@ -1030,6 +1060,8 @@ def main():
         "video_path": video_path,
         "thread": thread,
         "poll_options": None,
+        # Healthcheck signal: retired-fighter content should never slip out
+        "last_fight_year": (selected_data or {}).get("last_fight_year"),
     }
     
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:

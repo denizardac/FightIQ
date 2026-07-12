@@ -14,7 +14,7 @@ from io import BytesIO
 # Add project root to path for core imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, VISUALS_DIR, ASSETS_DIR, PROJECT_ROOT
-from core.naming import safe_filename, card_basename, radar_basename, versus_basename
+from core.naming import safe_filename, card_basename, radar_basename, versus_basename, pick_basename
 from core.ufcstats_http import fetch as ufcstats_fetch
 try:
     from core import config
@@ -1500,6 +1500,268 @@ def run_versus_only(fight_index: int):
         return None
 
 
+# ==========================================
+# 4. AI PICK CARD (prediction visual)
+# ==========================================
+def _circle_portrait(img_path, size):
+    """Load a portrait as a circular RGBA image of `size` px (None-safe)."""
+    try:
+        img = Image.open(img_path).convert("RGBA")
+    except Exception:
+        return None
+    img = ImageOps.fit(img, (size, size), Image.LANCZOS, centering=(0.5, 0.28))
+    mask = Image.new("L", (size, size), 0)
+    ImageDraw.Draw(mask).ellipse((0, 0, size, size), fill=255)
+    img.putalpha(mask)
+    return img
+
+
+def _wrap_text(draw, text, font, max_width):
+    words = (text or "").split()
+    lines, cur = [], ""
+    for w in words:
+        trial = f"{cur} {w}".strip()
+        if draw.textlength(trial, font=font) <= max_width:
+            cur = trial
+        else:
+            if cur:
+                lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def _pretty_bet_label(bet):
+    """Human-readable bet label (shared with prediction_validate)."""
+    try:
+        from core.prediction_validate import pretty_bet_label
+        return pretty_bet_label(bet)
+    except Exception:
+        t = str(bet or "").replace("_", " ").strip()
+        low = t.lower()
+        if (low.startswith("over") or low.startswith("under")) and "round" not in low:
+            t = f"{t} Rounds"
+        return t
+
+
+def model_win_pct(confidence):
+    """Transparent confidence→probability mapping shown on the Pick card.
+
+    Linear 30 + 5*conf, capped at 85 — deliberately conservative so the card
+    never displays near-certainty. conf 5 → 55%, 7 → 65%, 10 → 80% (capped).
+    """
+    try:
+        c = max(1, min(10, int(confidence)))
+    except (TypeError, ValueError):
+        c = 5
+    return min(85, 30 + 5 * c)
+
+
+def create_pick_card(f1_name, f2_name, pick, img1_path=None, img2_path=None):
+    """AI PICK card: the prediction made visual (companion to the Versus card).
+
+    pick: {winner, method, confidence, bet, odds, odds_available, odds_source,
+           market_pct, key_factor}
+    Odds line renders ONLY verified board prices (odds_available) — an unpriced
+    pick shows 'ANALYSIS ONLY' instead of an invented number.
+    """
+    W, H = WIDTH, HEIGHT
+    img = Image.new("RGB", (W, H), COLORS["bg"])
+    draw = ImageDraw.Draw(img)
+
+    # Subtle vertical gradient
+    top_rgb, bot_rgb = (14, 14, 20), (6, 6, 8)
+    for y in range(H):
+        t = y / H
+        c = tuple(int(a + (b - a) * t) for a, b in zip(top_rgb, bot_rgb))
+        draw.line([(0, y), (W, y)], fill=c)
+
+    # Header
+    draw.rectangle([(0, 0), (W, 64)], fill=(0, 0, 0))
+    f_head = load_font("headline", 44)
+    draw.text((W // 2, 32), "FIGHTIQ  ·  AI PICK", font=f_head,
+              fill=COLORS["secondary"], anchor="mm")
+    draw.line([(0, 66), (W, 66)], fill=COLORS["secondary"], width=3)
+
+    winner_name = pick.get("winner") or f1_name
+    w_is_f1 = safe_filename(winner_name).lower() == safe_filename(f1_name).lower() or \
+        winner_name.lower() in f1_name.lower() or f1_name.lower() in winner_name.lower()
+
+    # Portraits
+    size = 330
+    cy = 300
+    cx1, cx2 = W // 4 + 30, 3 * W // 4 - 30
+    for (cx, path, name, is_winner, color) in (
+        (cx1, img1_path, f1_name, w_is_f1, COLORS["f1"]),
+        (cx2, img2_path, f2_name, not w_is_f1, COLORS["f2"]),
+    ):
+        ring = COLORS["secondary"] if is_winner else "#333333"
+        ring_w = 10 if is_winner else 4
+        # Glow ring for the pick
+        if is_winner:
+            for gw, alpha in ((26, 40), (18, 80)):
+                glow = Image.new("RGBA", (W, H), (0, 0, 0, 0))
+                gd = ImageDraw.Draw(glow)
+                gd.ellipse((cx - size // 2 - gw, cy - size // 2 - gw,
+                            cx + size // 2 + gw, cy + size // 2 + gw),
+                           outline=(255, 215, 0, alpha), width=gw)
+                img.paste(glow, (0, 0), glow)
+                draw = ImageDraw.Draw(img)
+        portrait = _circle_portrait(path, size) if path else None
+        if portrait:
+            if not is_winner:
+                portrait = ImageEnhance.Color(portrait).enhance(0.25)
+                portrait = ImageEnhance.Brightness(portrait).enhance(0.75)
+            img.paste(portrait, (cx - size // 2, cy - size // 2), portrait)
+            draw = ImageDraw.Draw(img)
+        else:
+            draw.ellipse((cx - size // 2, cy - size // 2, cx + size // 2, cy + size // 2),
+                         fill="#15151a")
+        draw.ellipse((cx - size // 2, cy - size // 2, cx + size // 2, cy + size // 2),
+                     outline=ring, width=ring_w)
+
+        f_name = load_font("headline", 46)
+        draw.text((cx, cy + size // 2 + 44), name.upper(), font=f_name,
+                  fill=color, anchor="mm")
+        if is_winner:
+            badge_y = cy - size // 2 - 34
+            f_badge = load_font("body_bold", 26)
+            badge_txt = "AI PICK"  # keep ASCII — Bebas/Roboto lack star glyphs
+            bw = draw.textlength(badge_txt, font=f_badge) + 44
+            draw.rounded_rectangle((cx - bw / 2, badge_y - 20, cx + bw / 2, badge_y + 20),
+                                   radius=20, fill=COLORS["secondary"])
+            draw.text((cx, badge_y), badge_txt, font=f_badge, fill="#000000", anchor="mm")
+
+    f_vs = load_font("headline", 54)
+    draw.text((W // 2, cy), "VS", font=f_vs, fill="#555555", anchor="mm")
+
+    # Prediction line
+    y = 620
+    method = pick.get("method", "")
+    f_pred_l = load_font("body_bold", 30)
+    draw.text((W // 2, y), "PREDICTION", font=f_pred_l, fill=COLORS["text_dark"], anchor="mm")
+    f_pred = load_font("headline", 66)
+    draw.text((W // 2, y + 58), f"{winner_name.upper()}  BY  {str(method).upper()}",
+              font=f_pred, fill=COLORS["text_white"], anchor="mm")
+
+    # Confidence bar (10 segments)
+    y = 780
+    try:
+        conf = max(1, min(10, int(pick.get("confidence", 5))))
+    except (TypeError, ValueError):
+        conf = 5
+    f_conf = load_font("body_bold", 28)
+    draw.text((W // 2, y), f"MODEL CONFIDENCE  {conf}/10", font=f_conf,
+              fill=COLORS["text_light"], anchor="mm")
+    seg_w, seg_h, gap = 74, 26, 12
+    total_w = 10 * seg_w + 9 * gap
+    x0 = (W - total_w) // 2
+    for i in range(10):
+        x = x0 + i * (seg_w + gap)
+        filled = i < conf
+        color = COLORS["secondary"] if filled else "#26262c"
+        draw.rounded_rectangle((x, y + 28, x + seg_w, y + 28 + seg_h), radius=8, fill=color)
+
+    # Bet panel — verified odds only
+    y = 906
+    draw.rounded_rectangle((70, y, W - 70, y + 150), radius=18, fill="#101014",
+                           outline="#2a2a30", width=2)
+    f_bet_l = load_font("body_bold", 26)
+    f_bet = load_font("headline", 46)
+    if pick.get("odds_available") and pick.get("odds"):
+        source = (pick.get("odds_source") or "").strip()
+        source_label = source.split(" (")[0] if source and source != "unknown" else ""
+        bet_pretty = _pretty_bet_label(pick.get("bet", ""))
+        bet_line = f"{bet_pretty}  @ {round(float(pick['odds']), 2)}"
+        draw.text((W // 2, y + 40), "THE PLAY  ·  VERIFIED ODDS", font=f_bet_l,
+                  fill=COLORS["primary"], anchor="mm")
+        draw.text((W // 2, y + 92), bet_line, font=f_bet, fill=COLORS["text_white"], anchor="mm")
+        if source_label:
+            f_src = load_font("body_regular", 22)
+            draw.text((W // 2, y + 130), f"source: {source_label}", font=f_src,
+                      fill=COLORS["text_dark"], anchor="mm")
+    else:
+        draw.text((W // 2, y + 55), "ANALYSIS ONLY", font=f_bet_l,
+                  fill=COLORS["text_dark"], anchor="mm")
+        draw.text((W // 2, y + 100), "No priced edge on today's board",
+                  font=load_font("body_regular", 28), fill=COLORS["text_dark"], anchor="mm")
+
+    # Model vs market
+    y = 1096
+    mp = model_win_pct(pick.get("confidence"))
+    market_pct = pick.get("market_pct")
+    f_mm = load_font("body_bold", 30)
+    if market_pct:
+        edge = round(mp - float(market_pct))
+        edge_txt = f"EDGE {'+' if edge >= 0 else ''}{edge}"
+        edge_col = COLORS["primary"] if edge >= 0 else COLORS["accent"]
+        draw.text((W // 2 - 240, y), f"MODEL {mp}%", font=f_mm,
+                  fill=COLORS["text_light"], anchor="mm")
+        draw.text((W // 2 + 10, y), f"MARKET {round(float(market_pct))}%", font=f_mm,
+                  fill=COLORS["text_light"], anchor="mm")
+        draw.text((W // 2 + 260, y), edge_txt, font=f_mm, fill=edge_col, anchor="mm")
+    else:
+        draw.text((W // 2, y), f"MODEL WIN PROBABILITY  {mp}%", font=f_mm,
+                  fill=COLORS["text_light"], anchor="mm")
+
+    # Key factor
+    kf = (pick.get("key_factor") or "").strip()
+    if kf:
+        f_kf = load_font("body_regular", 30)
+        lines = _wrap_text(draw, f"“{kf}”", f_kf, W - 200)[:3]
+        ky = 1170
+        for line in lines:
+            draw.text((W // 2, ky), line, font=f_kf, fill="#BBBBBB", anchor="mm")
+            ky += 40
+
+    # Footer
+    draw.rectangle([(0, H - 46), (W, H)], fill=(4, 4, 6))
+    f_foot = load_font("body_bold", 20)
+    draw.text((W // 2, H - 23), "FIGHTIQ.AI  ·  @FightIQBot  ·  Not financial advice",
+              font=f_foot, fill="#777777", anchor="mm")
+
+    out_path = os.path.join(VISUALS_DIR, pick_basename(f1_name, f2_name))
+    img.save(out_path, "PNG")
+    print(f"   ✅ Pick Card saved: {out_path}")
+    return out_path
+
+
+def generate_pick_cards(ai_data, hunter):
+    """One AI PICK card per analyzed fight (uses verified odds only)."""
+    made = 0
+    for item in ai_data:
+        matchup = item.get("matchup", "")
+        if " vs " not in matchup:
+            continue
+        f1, f2 = [s.strip() for s in matchup.split(" vs ", 1)]
+        brain = item.get("fight_brain_output", {}) or {}
+        pred = brain.get("prediction", {}) or {}
+        mc = brain.get("market_context", {}) or {}
+        pick = {
+            "winner": pred.get("winner", f1),
+            "method": pred.get("method", "Dec"),
+            "confidence": pred.get("confidence", 5),
+            "bet": mc.get("canonical_bet", ""),
+            "odds": mc.get("canonical_odds"),
+            "odds_available": bool(mc.get("canonical_odds_available")),
+            "odds_source": mc.get("odds_source", "unknown"),
+            "market_pct": mc.get("winner_implied_pct"),
+            "key_factor": pred.get("key_factor", ""),
+        }
+        try:
+            create_pick_card(
+                f1, f2, pick,
+                img1_path=hunter.get_fighter_image(f1),
+                img2_path=hunter.get_fighter_image(f2),
+            )
+            made += 1
+        except Exception as e:
+            print(f"   ⚠️ Pick card error ({matchup}): {e}")
+    print(f"   🎯 Pick cards generated: {made}")
+    return made
+
+
 def main():
     print("--- 🎨 STEP 6: VISUAL ENGINE (DESIGN & CLEAN) ---")
     if not os.path.exists(OUTPUT_DIR): os.makedirs(OUTPUT_DIR)
@@ -1630,6 +1892,14 @@ def main():
                 print(f"   Versus card error ({f1_name} vs {f2_name}): {ve}")
     except Exception as e:
         print(f"⚠️ Versus card generation error: {e}")
+
+    # 4. AI PICK KARTLARI (tahmin görseli — betting tweet'in 2. görseli)
+    try:
+        with open(AI_DATA_FILE, "r", encoding="utf-8") as f:
+            ai_data = json.load(f)
+        generate_pick_cards(ai_data, hunter)
+    except Exception as e:
+        print(f"⚠️ Pick card generation error: {e}")
 
     print(f"\n✅ VISUALS COMPLETE.")
 

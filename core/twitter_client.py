@@ -136,18 +136,26 @@ class TwitterClient:
             return config.TWITTER_THREAD_DELAY_SECONDS
         return config.TWITTER_POST_DELAY_SECONDS
 
+    @staticmethod
+    def _media_list(media_path) -> list:
+        """Accept a single path or a list of paths (max 4 per X rules)."""
+        if not media_path:
+            return []
+        paths = media_path if isinstance(media_path, (list, tuple)) else [media_path]
+        return [str(p) for p in paths if p and os.path.exists(str(p))][:4]
+
     def post(
         self,
         text: str,
-        media_path: Optional[str] = None,
+        media_path=None,
         reply_to_id: Optional[str] = None,
         poll_options: Optional[list] = None,
         poll_duration_minutes: Optional[int] = None,
     ) -> Optional[str]:
         if self.dry_run:
             print(f"\n[DRY-RUN] TWEET (reply_to={reply_to_id}):\n  {text[:120]}...")
-            if media_path:
-                print(f"  MEDIA: {media_path}")
+            for p in self._media_list(media_path):
+                print(f"  MEDIA: {p}")
             if poll_options:
                 print(f"  POLL: {poll_options}")
             return "DRY_RUN_FAKE_ID"
@@ -163,17 +171,17 @@ class TwitterClient:
     def _post_official(
         self,
         text: str,
-        media_path: Optional[str],
+        media_path,
         reply_to_id: Optional[str],
         poll_options: Optional[list] = None,
         poll_duration_minutes: Optional[int] = None,
     ) -> Optional[str]:
         media_ids = []
-        if media_path and os.path.exists(str(media_path)):
-            print(f"   🖼️ Uploading: {os.path.basename(str(media_path))}")
+        for path in self._media_list(media_path):
+            print(f"   🖼️ Uploading: {os.path.basename(path)}")
             try:
-                uploaded = self._tweepy_api.media_upload(filename=str(media_path))
-                media_ids = [uploaded.media_id]
+                uploaded = self._tweepy_api.media_upload(filename=path)
+                media_ids.append(uploaded.media_id)
             except Exception as e:
                 print(f"   ⚠️ Media upload failed: {e}")
 
@@ -237,13 +245,13 @@ class TwitterClient:
     ) -> Optional[str]:
         async def _async_post():
             media_ids = []
-            if media_path and os.path.exists(str(media_path)):
-                print(f"   🖼️ Uploading: {os.path.basename(str(media_path))}")
-                media_id_result = await self._twikit.upload_media(str(media_path))
+            for path in self._media_list(media_path):
+                print(f"   🖼️ Uploading: {os.path.basename(path)}")
+                media_id_result = await self._twikit.upload_media(path)
                 if hasattr(media_id_result, "media_id"):
-                    media_ids = [media_id_result.media_id]
+                    media_ids.append(media_id_result.media_id)
                 elif isinstance(media_id_result, (str, int)):
-                    media_ids = [str(media_id_result)]
+                    media_ids.append(str(media_id_result))
 
             reply_to_param = (
                 str(reply_to_id)

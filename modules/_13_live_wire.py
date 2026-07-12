@@ -44,6 +44,7 @@ load_dotenv(os.path.join(PROJECT_ROOT, ".env"))
 CARD_FILE = get_data_path("1_card.json")
 RESULTS_FILE = get_data_path("3_results.json")
 LIVE_WIRE_HISTORY = get_data_path("live_wire_history.json")
+PUBLISHED_PICKS_FILE = get_data_path("published_picks.json")
 COOKIES_FILE = get_data_path("twitter_cookies.json")
 
 UFC_STATS_COMPLETED = "http://ufcstats.com/statistics/events/completed"
@@ -140,7 +141,9 @@ def _event_url_from_completed(expected_event=""):
 def _parse_fight_row(row):
     """
     Parse one UFCStats event-details row.
-    Current layout (2026): col0 = win flag, col1 = two fighters (winner listed first).
+    Current layout (2026): col0 = win flag, col1 = two fighters (winner first),
+    col7 = method, col8 = round, col9 = time. Round/time let us settle
+    Over/Under and distance bets honestly.
     """
     cols = row.find_all("td")
     if len(cols) < 8:
@@ -169,7 +172,149 @@ def _parse_fight_row(row):
             method_parts.append(t)
     method = " ".join(method_parts) if method_parts else "Decision"
 
-    return {"winner": winner, "loser": loser, "method": method}
+    round_num, time_str = None, None
+    if len(cols) >= 10:
+        r_txt = cols[8].get_text(" ", strip=True)
+        t_txt = cols[9].get_text(" ", strip=True)
+        if r_txt.isdigit():
+            round_num = int(r_txt)
+        if re.match(r"^\d{1,2}:\d{2}$", t_txt):
+            time_str = t_txt
+
+    return {
+        "winner": winner, "loser": loser, "method": method,
+        "round": round_num, "time": time_str,
+    }
+
+
+# ==========================================
+# PUBLISHED-PICK HONESTY LAYER
+# The bot may only claim "we called it" for picks that were actually
+# TWEETED (recorded in published_picks.json by the Social Director).
+# Internal predictions that never reached Twitter are not claimable.
+# ==========================================
+
+def _norm_name(name):
+    return "".join(ch for ch in str(name or "").lower() if ch.isalnum() or ch == " ").strip()
+
+
+def _names_match(a, b):
+    na, nb = _norm_name(a), _norm_name(b)
+    if not na or not nb:
+        return False
+    if na == nb or na in nb or nb in na:
+        return True
+    pa = [p for p in na.split() if len(p) > 2]
+    pb = [p for p in nb.split() if len(p) > 2]
+    return bool(pa and pb and pa[-1] == pb[-1])
+
+
+def load_published_picks():
+    if not os.path.exists(PUBLISHED_PICKS_FILE):
+        return {}
+    try:
+        with open(PUBLISHED_PICKS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def find_published_pick(published, winner, loser):
+    for matchup, rec in published.items():
+        if " vs " not in matchup:
+            continue
+        a, b = matchup.split(" vs ", 1)
+        if (_names_match(winner, a) and _names_match(loser, b)) or \
+           (_names_match(winner, b) and _names_match(loser, a)):
+            return rec
+    return None
+
+
+def fight_duration_seconds(round_num, time_str):
+    """Total elapsed fight time; None when round/time unknown."""
+    if not round_num:
+        return None
+    sec = 0
+    if time_str and ":" in str(time_str):
+        try:
+            m, s = str(time_str).split(":")
+            sec = int(m) * 60 + int(s)
+        except ValueError:
+            sec = 0
+    return (int(round_num) - 1) * 300 + sec
+
+
+def _method_bucket(method_str):
+    m = str(method_str or "").lower()
+    if "dec" in m:
+        return "dec"
+    if "sub" in m or "choke" in m or "tap" in m:
+        return "sub"
+    if "ko" in m or "tko" in m:
+        return "ko"
+    return "other"
+
+
+def evaluate_published_pick(pub, result):
+    """Grade the PUBLISHED bet against the actual result.
+
+    Returns dict: {category, winner_correct, method_claimed, method_correct,
+    bet_won} where category in FULL_WIN | WINNER_ONLY | LOSS | NO_PICK.
+    bet_won may be None when unsettleable (e.g. O/U without round data).
+    """
+    if not pub:
+        return {"category": "NO_PICK", "winner_correct": None,
+                "method_claimed": None, "method_correct": None, "bet_won": None}
+
+    bt = (pub.get("bet_type") or "ml").lower()
+    predicted_winner = pub.get("predicted_winner") or ""
+    actual_winner = result.get("winner", "")
+    actual_bucket = _method_bucket(result.get("method"))
+    winner_correct = _names_match(predicted_winner, actual_winner) if predicted_winner else None
+
+    method_claimed = bt if bt in ("ko", "sub", "dec") else None
+    method_correct = None
+    if method_claimed:
+        method_correct = bool(winner_correct) and actual_bucket == method_claimed
+
+    bet_won = None
+    if bt == "ml":
+        bet_won = bool(winner_correct)
+    elif bt in ("ko", "sub", "dec"):
+        bet_won = bool(method_correct)
+    elif bt in ("over", "under"):
+        m = re.search(r"(\d+(?:\.\d+)?)", str(pub.get("bet", "")))
+        threshold = float(m.group(1)) if m else 2.5
+        dur = fight_duration_seconds(result.get("round"), result.get("time"))
+        if actual_bucket == "dec":
+            bet_won = (bt == "over")  # went the full distance
+        elif dur is not None:
+            bet_won = (dur > threshold * 300) if bt == "over" else (dur < threshold * 300)
+    elif bt == "distance_yes":
+        bet_won = actual_bucket == "dec"
+    elif bt == "distance_no":
+        bet_won = actual_bucket != "dec"
+
+    # Category for the reaction template
+    if winner_correct is None:
+        # Non-winner-side bet (e.g. totals) — judge purely on the bet
+        if bet_won is True:
+            category = "FULL_WIN"
+        elif bet_won is False:
+            category = "LOSS"
+        else:
+            category = "NO_PICK"
+    elif winner_correct and (bet_won is True) and (method_correct in (None, True)):
+        category = "FULL_WIN"
+    elif winner_correct:
+        category = "WINNER_ONLY"
+    else:
+        category = "LOSS"
+
+    return {"category": category, "winner_correct": winner_correct,
+            "method_claimed": method_claimed, "method_correct": method_correct,
+            "bet_won": bet_won}
 
 
 def get_live_results():
@@ -208,42 +353,74 @@ def get_live_results():
     return results
 
 
-def generate_reaction(winner, loser, method, our_prediction=None):
+def _fallback_reaction(winner, loser, method, outcome):
+    cat = outcome.get("category", "NO_PICK")
+    if cat == "FULL_WIN":
+        return f"✅ CALLED IT! {winner} defeats {loser} via {method} — exactly the pick we posted. #UFC"
+    if cat == "WINNER_ONLY":
+        return f"✅ {winner} gets it done vs {loser} ({method}). We had the winner — the method went differently. #UFC"
+    if cat == "LOSS":
+        return f"❌ {winner} defeats {loser} via {method}. Our posted pick missed this one — credit where it's due. #UFC"
+    return f"🚨 {winner} defeats {loser} via {method}! #UFC"
+
+
+def generate_reaction(winner, loser, method, published_pick=None, outcome=None):
+    """Reaction tweet locked to the graded outcome of the PUBLISHED pick.
+
+    The old version handed the model a free 'Celebrate! Hype it up!' brief
+    based on internal predictions — it claimed calls that were never tweeted,
+    quoted never-published confidence numbers, and shouted CASH IT while the
+    posted bet had actually lost. Now the claim template is decided in code
+    from published_picks.json; the model only fills in flavor.
+    """
+    outcome = outcome or {"category": "NO_PICK"}
+    cat = outcome.get("category", "NO_PICK")
+
     if not client:
-        return f"🚨 {winner} defeats {loser} via {method}! #UFC"
+        return _fallback_reaction(winner, loser, method, outcome)
+
+    base = f"RESULT: {winner} defeats {loser} via {method}\n\n"
+    pub_bet = (published_pick or {}).get("bet", "")
+    pub_conf = (published_pick or {}).get("confidence")
+    conf_note = ""
+    if pub_conf and (published_pick or {}).get("card_published"):
+        # Confidence may only be quoted when it was actually published (pick card)
+        conf_note = f" (posted confidence {pub_conf}/10)"
+
+    if cat == "FULL_WIN":
+        brief = (
+            f"OUR PUBLISHED PICK WON: we posted '{pub_bet}'{conf_note} before the fight and it hit.\n"
+            "TONE: Celebrate confidently. You may say 'we called it' and reference the posted bet.\n"
+        )
+    elif cat == "WINNER_ONLY":
+        brief = (
+            f"PARTIAL: we posted '{pub_bet}'{conf_note} — the WINNER was right but the "
+            f"bet/method did not hit as posted.\n"
+            "TONE: Honest satisfaction. Credit the winner call, openly note the method/bet "
+            "went differently. Do NOT say 'cash it', do NOT claim the bet won.\n"
+        )
+    elif cat == "LOSS":
+        brief = (
+            f"MISS: we posted '{pub_bet}'{conf_note} and it LOST.\n"
+            "TONE: Own the miss with class. Respect the actual winner. No excuses, "
+            "no fake celebration, no 'cash it'.\n"
+        )
+    else:  # NO_PICK
+        brief = (
+            "NO PUBLISHED PICK for this fight.\n"
+            "TONE: Pure neutral hype about the result. You must NOT claim any prediction, "
+            "pick, confidence number, or 'we called it' — we published nothing.\n"
+        )
 
     try:
-        prompt = f"""You are FightIQ, a hyped MMA analyst bot. React to this fight result with maximum energy:
+        prompt = f"""You are FightIQ, an MMA analyst bot known for HONEST accountability. React to this fight result:
 
-RESULT: {winner} defeats {loser} via {method}
-
-"""
-        if our_prediction:
-            predicted_winner = our_prediction.get("winner", "")
-            predicted_method = our_prediction.get("method", "")
-            confidence = our_prediction.get("confidence", 5)
-
-            if predicted_winner.lower() in winner.lower() or winner.lower() in predicted_winner.lower():
-                prompt += (
-                    f"OUR PREDICTION: ✅ We called {predicted_winner} via {predicted_method} "
-                    f"(Confidence: {confidence}/10)\n"
-                    "TONE: Celebrate being right! Hype it up!\n"
-                )
-            else:
-                prompt += (
-                    f"OUR PREDICTION: ❌ We predicted {predicted_winner} (they lost)\n"
-                    "TONE: Shocked but respectful. Acknowledge the upset.\n"
-                )
-        else:
-            prompt += "TONE: Pure hype, unbiased reaction.\n"
-
-        prompt += """
+{base}{brief}
 Requirements:
 - Maximum 250 characters (short and punchy)
-- Use emojis (🚨🔥💀🩸👑)
-- Be energetic and engaging
+- Use emojis (🚨🔥💀🩸✅❌ as fits the tone)
+- Never invent picks, odds, or confidence numbers beyond what is stated above
 - Add #UFC hashtag at the end
-- Sound like a real MMA fan, not a robot
 
 Return ONLY the tweet text, nothing else."""
 
@@ -255,7 +432,7 @@ Return ONLY the tweet text, nothing else."""
 
     except Exception as e:
         print(f"   ❌ AI reaction generation failed: {e}")
-        return f"🚨 {winner} defeats {loser} via {method}! #UFC"
+        return _fallback_reaction(winner, loser, method, outcome)
 
 
 def post_live_reaction(reaction_text):
@@ -285,45 +462,17 @@ def post_live_reaction(reaction_text):
         return None
 
 
-def _load_predictions():
-    predictions = {}
-    if not os.path.exists(RESULTS_FILE):
-        return predictions
-    try:
-        with open(RESULTS_FILE, "r", encoding="utf-8") as f:
-            for item in json.load(f):
-                matchup = item.get("matchup", "")
-                brain = item.get("fight_brain_output", {})
-                if matchup and brain.get("prediction"):
-                    predictions[matchup] = brain["prediction"]
-    except Exception:
-        pass
-    return predictions
-
-
-def _find_prediction(predictions, winner, loser):
-    for key in (f"{winner} vs {loser}", f"{loser} vs {winner}"):
-        if key in predictions:
-            return predictions[key]
-    w_low, l_low = winner.lower(), loser.lower()
-    for matchup, pred in predictions.items():
-        if " vs " not in matchup:
-            continue
-        if w_low in matchup.lower() and l_low in matchup.lower():
-            return pred
-    return None
-
-
 def run_live_wire_once():
+    """Single poll. Returns (posted_count, finished_fight_count)."""
     print(f"\n[{datetime.now().strftime('%H:%M:%S')}] 🔍 Polling for fight results...")
 
     history = load_history()
-    predictions = _load_predictions()
+    published = load_published_picks()
     live_results = get_live_results()
 
     if not live_results:
         print("   No finished fights on event page yet.")
-        return 0
+        return 0, 0
 
     posted = 0
     for result in live_results:
@@ -338,8 +487,10 @@ def run_live_wire_once():
 
         print(f"\n   🆕 NEW RESULT: {winner} defeats {loser} via {method}")
 
-        our_prediction = _find_prediction(predictions, winner, loser)
-        reaction = generate_reaction(winner, loser, method, our_prediction)
+        pub = find_published_pick(published, winner, loser)
+        outcome = evaluate_published_pick(pub, result)
+        print(f"   🧾 Published pick: {pub.get('bet') if pub else 'NONE'} → {outcome['category']}")
+        reaction = generate_reaction(winner, loser, method, pub, outcome)
         print(f"   💬 Reaction: {reaction}")
 
         tweet_id = post_live_reaction(reaction)
@@ -348,6 +499,11 @@ def run_live_wire_once():
                 "winner": winner,
                 "loser": loser,
                 "method": method,
+                "round": result.get("round"),
+                "time": result.get("time"),
+                "published_bet": (pub or {}).get("bet"),
+                "outcome": outcome["category"],
+                "bet_won": outcome["bet_won"],
                 "reaction": reaction,
                 "tweet_id": str(tweet_id),
                 "timestamp": datetime.now().isoformat(),
@@ -356,7 +512,7 @@ def run_live_wire_once():
             posted += 1
             time.sleep(10)  # Rate limit between fight tweets
 
-    return posted
+    return posted, len(live_results)
 
 
 def run_live_wire_continuous():
@@ -373,18 +529,22 @@ def run_live_wire_continuous():
     print(f"Poll interval: {POLL_INTERVAL}s | Max runtime: {MAX_RUNTIME_HOURS}h")
     print("=" * 60)
 
+    total_fights = len(card.get("fights", [])) or 99
     deadline = datetime.now() + timedelta(hours=MAX_RUNTIME_HOURS)
     try:
         while datetime.now() < deadline:
-            run_live_wire_once()
+            _, finished = run_live_wire_once()
+            if finished >= total_fights:
+                print(f"\n🏁 All {total_fights} fights have results — ending early.")
+                break
             time.sleep(POLL_INTERVAL)
     except KeyboardInterrupt:
         print("\n\n✅ Live Wire stopped by user.")
         _post_scorecard_recap()
         return
 
-    print(f"\n✅ Live Wire finished after {MAX_RUNTIME_HOURS}h window.")
-    # End of night: score our predictions vs actual results and post a recap.
+    print(f"\n✅ Live Wire window closed ({MAX_RUNTIME_HOURS}h max, early-exit on full card).")
+    # End of night: score our PUBLISHED picks vs actual results and post a recap.
     _post_scorecard_recap()
 
 
@@ -415,8 +575,8 @@ def main():
     if args.once or (not args.auto and not args.force):
         if not args.force and not is_fight_night():
             print("   ℹ️  Not fight night. Use --force to poll anyway.")
-        n = run_live_wire_once()
-        print(f"   Done. Posted {n} new reaction(s).")
+        n, finished = run_live_wire_once()
+        print(f"   Done. Posted {n} new reaction(s) ({finished} finished on page).")
         return
 
     if args.auto:

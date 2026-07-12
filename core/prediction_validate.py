@@ -34,10 +34,22 @@ def implied_probability(decimal_odds):
 
     return round(100.0 / decimal_odds, 1)
 
+def pretty_bet_label(bet):
+    """Human-readable market label: 'Over_2.5' -> 'Over 2.5 Rounds'.
+
+    The raw internal token ('Over_2.5') looked like a code leak in tweets.
+    """
+    t = str(bet or "").replace("_", " ").strip()
+    low = t.lower()
+    if (low.startswith("over") or low.startswith("under")) and "round" not in low:
+        t = f"{t} Rounds"
+    return t
+
+
 def _compose_betting_tweet(canonical, odds_snip, key_factor):
     """Assemble betting tweet, trimming key_factor on a word boundary
     (never mid-word) to fit Twitter's limit."""
-    prefix = f"Best bet: {canonical}{odds_snip}. "
+    prefix = f"Best bet: {pretty_bet_label(canonical)}{odds_snip}. "
     suffix = " #UFC #Betting"
     budget = max(0, 275 - len(prefix) - len(suffix))
     kf = (key_factor or "").strip()
@@ -50,6 +62,27 @@ def _compose_betting_tweet(canonical, odds_snip, key_factor):
 
 
 
+
+
+
+_INTERNAL_TERM_MAP = [
+    # (regex, public replacement) — internal metric names must never reach Twitter
+    (r"\bwith a [\d.]+ ranking[ _]proxy\b", "with proven top-level experience"),
+    (r"\b[\d.]+ ranking[ _]proxy\b", "proven top-level experience"),
+    (r"\branking[ _]proxy\b", "level of competition"),
+    (r"\binjury[ _]news[ _]flag\b", "injury concerns"),
+    (r"\bfinish[ _]rate[ _]pct\b", "finish rate"),
+    (r"\bwin[ _]rate[ _]pct\b", "win rate"),
+]
+
+
+def scrub_internal_terms(text):
+    """Final gate: replace internal metric names with public wording."""
+    import re as _re
+    out = text or ""
+    for pat, repl in _INTERNAL_TERM_MAP:
+        out = _re.sub(pat, repl, out, flags=_re.IGNORECASE)
+    return out
 
 def _normalize_winner_name(winner: str, f1: str, f2: str) -> str:
 
@@ -146,6 +179,8 @@ def validate_and_unify(
     scout1: dict = None,
 
     scout2: dict = None,
+
+    odds_source: str = None,
 
 ) -> dict:
 
@@ -317,6 +352,11 @@ def validate_and_unify(
 
 
 
+    # Source stamp: every published price must be traceable to a scraper
+    for _a in (safe, value, violence):
+        if isinstance(_a, dict) and _a.get("odds_available"):
+            _a["odds_source"] = odds_source or "unknown"
+
     angles["safe_pick"] = safe
 
     angles["value_pick"] = value
@@ -333,11 +373,15 @@ def validate_and_unify(
 
         odds_snip = f" @ {round(float(can_odds), 2)}"
 
+        tweets["betting_tweet"] = _compose_betting_tweet(canonical, odds_snip, key_factor)
+
     else:
 
+        # NO PRICED PICK -> NO BETTING TWEET. A pick without a real board
+        # price must never reach Twitter (this is what let invented props out).
         odds_snip = ""
 
-    tweets["betting_tweet"] = _compose_betting_tweet(canonical, odds_snip, key_factor)
+        tweets["betting_tweet"] = ""
 
 
 
@@ -359,9 +403,17 @@ def validate_and_unify(
 
         "canonical_odds_available": bool(value.get("odds_available")),
 
+        "odds_source": odds_source or "unknown",
+
     }
 
     brain_output["betting_angles"] = angles
+
+    # Banned-term final pass on everything that reaches Twitter
+    for _k in list(tweets.keys()):
+        tweets[_k] = scrub_internal_terms(tweets[_k])
+    if brain_output.get("spotlight_content"):
+        brain_output["spotlight_content"] = scrub_internal_terms(brain_output["spotlight_content"])
 
     brain_output["content_tweets"] = tweets
 

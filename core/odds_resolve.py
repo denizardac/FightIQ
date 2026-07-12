@@ -82,6 +82,10 @@ def _match_pick_to_option(pick_text: str, bet_type: str, options, winner: str, f
     return None
 
 
+# Max relative deviation for accepting an AI-quoted price against the board.
+AI_ODDS_BOARD_TOLERANCE = 0.05
+
+
 def resolve_pick_odds(
     pick_text: str,
     bet_type: str,
@@ -94,18 +98,30 @@ def resolve_pick_odds(
 ) -> Tuple[Optional[float], Optional[str], bool]:
     """
     Returns (decimal_odds, matched_label, odds_available).
-    ai_odds used only if it maps to a valid decimal from the board (not hallucinated).
-    """
-    dec = to_decimal(ai_odds)
-    if dec and 1.01 <= dec <= 100:
-        return dec, pick_text, True
 
+    HALLUCINATION GUARD: the model's quoted price (ai_odds) is NEVER trusted
+    on its own — it used to pass straight through if it merely looked like a
+    plausible decimal, which put invented "KO @ 4.4" props on Twitter. Now the
+    board is authoritative: ai_odds only helps pick between board options when
+    it matches one of their prices within ±5%. No board price → no odds.
+    """
     options = catalog_bets(market_data or {}, f1, f2, winner, method)
+
+    # 1) Direct board match on label / bet type — authoritative price
     opt = _match_pick_to_option(pick_text, bet_type, options, winner, f1, f2)
     if opt and opt.odds:
         return opt.odds, format_bet_label(opt, winner), True
 
-    # ML fallback for winner-side picks when prop line missing
+    # 2) AI-quoted price accepted ONLY if it matches a real board price ±5%
+    dec = to_decimal(ai_odds)
+    if dec and options:
+        for o in options:
+            if not o.odds:
+                continue
+            if abs(o.odds - dec) / o.odds <= AI_ODDS_BOARD_TOLERANCE:
+                return o.odds, format_bet_label(o, winner), True
+
+    # 3) ML fallback for winner-side picks when prop line missing
     if bet_type in ("ml", "ko", "sub", "dec", "", None) and _name_in(pick_text, winner):
         ml = winner_ml_odds(market_data, f1, f2, winner)
         if ml:

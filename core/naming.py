@@ -38,3 +38,8 @@ def radar_basename(f1: str, f2: str) -> str:
 
 def card_basename(name: str) -> str:
     return f"Card_{safe_filename(name)}.png"
+
+
+def pick_basename(f1: str, f2: str) -> str:
+    """AI Pick card (prediction visual) filename."""
+    return f"Pick_{safe_filename(f1)}_vs_{safe_filename(f2)}.png"

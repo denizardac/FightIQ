@@ -144,12 +144,23 @@ def test_find_prediction_reversed_order():
     assert scorecard.find_prediction_for(result, preds) is preds[0]
 
 
-def test_score_one_winner_and_method():
+def test_score_one_winner_and_method_published():
+    """Method credit ONLY when the published bet was a method prop that hit."""
     pred = {"matchup": "A vs B", "winner": "Jon Jones", "method": "KO", "confidence": 8}
     result = {"winner": "Jon Jones", "loser": "B", "method": "KO/TKO Punch"}
-    row = scorecard.score_one(result, pred)
+    pub = {"bet": "Jon Jones by KO/TKO", "bet_type": "ko"}
+    row = scorecard.score_one(result, pred, published=pub)
     assert row["winner_correct"] is True
     assert row["method_correct"] is True
+
+
+def test_score_one_no_published_method_no_credit():
+    """Internal method prediction without a published method bet gets NO credit."""
+    pred = {"matchup": "A vs B", "winner": "Jon Jones", "method": "KO", "confidence": 8}
+    result = {"winner": "Jon Jones", "loser": "B", "method": "KO/TKO Punch"}
+    row = scorecard.score_one(result, pred, published={"bet": "Jon Jones ML", "bet_type": "ml"})
+    assert row["winner_correct"] is True
+    assert row["method_correct"] is False  # ML bet published — no method claim allowed
 
 
 def test_score_one_winner_wrong():
@@ -244,3 +255,157 @@ def test_betting_tweet_no_midword_cut():
 def test_betting_tweet_short_untouched():
     t = _compose_betting_tweet("Cory Sandhagen ML", " @ 1.69", "Wins the range battle.")
     assert t == "Best bet: Cory Sandhagen ML @ 1.69. Wins the range battle. #UFC #Betting"
+
+
+def test_betting_tweet_pretty_market_label():
+    from core.prediction_validate import pretty_bet_label
+    assert pretty_bet_label("Over_2.5") == "Over 2.5 Rounds"
+    assert pretty_bet_label("Under_1.5") == "Under 1.5 Rounds"
+    assert pretty_bet_label("Jon Jones ML") == "Jon Jones ML"
+    t = _compose_betting_tweet("Over_2.5", " @ 2.7", "High output fight.")
+    assert "Over_2.5" not in t and "Over 2.5 Rounds @ 2.7" in t
+
+
+# ---------- odds hallucination guard (Phase 1) ----------
+
+from core.odds_resolve import resolve_pick_odds
+
+_ML_ONLY_BOARD = {
+    "moneyline": {
+        "Jon Jones": {"decimal": 1.65, "american": "-153"},
+        "Stipe Miocic": {"decimal": 2.30, "american": "+130"},
+    }
+}
+
+
+def test_ai_invented_prop_price_rejected():
+    """AI says 'Jones by KO @ 4.4' but board only has ML -> must NOT return 4.4."""
+    dec, label, ok = resolve_pick_odds(
+        "Jon Jones by KO/TKO", "ko", _ML_ONLY_BOARD,
+        "Jon Jones", "Stipe Miocic", "Jon Jones", "KO", ai_odds=4.4,
+    )
+    assert dec != 4.4
+    # Falls back to the REAL ML price
+    assert ok and dec == 1.65 and "ML" in label
+
+
+def test_ai_price_matching_board_within_tolerance_accepted():
+    """AI quotes 1.66 (within 5% of board ML 1.65) -> board price used."""
+    dec, label, ok = resolve_pick_odds(
+        "Jones moneyline", "ml", _ML_ONLY_BOARD,
+        "Jon Jones", "Stipe Miocic", "Jon Jones", "Dec", ai_odds=1.66,
+    )
+    assert ok and dec == 1.65
+
+
+def test_no_board_at_all_returns_unavailable():
+    dec, label, ok = resolve_pick_odds(
+        "Jon Jones by KO/TKO", "ko", {},
+        "Jon Jones", "Stipe Miocic", "Jon Jones", "KO", ai_odds=4.4,
+    )
+    assert not ok and dec is None
+
+
+def test_non_winner_prop_without_board_line_unavailable():
+    """Over/Under with no totals on board and invented AI price -> unavailable."""
+    dec, label, ok = resolve_pick_odds(
+        "Over 2.5 Rounds", "over", _ML_ONLY_BOARD,
+        "Jon Jones", "Stipe Miocic", "Jon Jones", "Dec", ai_odds=3.9,
+    )
+    assert not ok and dec is None
+
+
+# ---------- Live Wire published-pick honesty (Phase 2) ----------
+
+import importlib.util as _ilu2
+_lw_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "modules", "_13_live_wire.py")
+_lw_spec = _ilu2.spec_from_file_location("_13_live_wire", _lw_path)
+livewire = _ilu2.module_from_spec(_lw_spec)
+_lw_spec.loader.exec_module(livewire)
+
+
+def test_outcome_no_published_pick():
+    out = livewire.evaluate_published_pick(None, {"winner": "A", "loser": "B", "method": "KO"})
+    assert out["category"] == "NO_PICK"
+
+
+def test_outcome_full_win_method_prop():
+    pub = {"bet": "Jon Jones by KO/TKO", "bet_type": "ko", "predicted_winner": "Jon Jones"}
+    res = {"winner": "Jon Jones", "loser": "Stipe", "method": "KO/TKO Punch", "round": 1, "time": "2:00"}
+    out = livewire.evaluate_published_pick(pub, res)
+    assert out["category"] == "FULL_WIN" and out["bet_won"] is True
+
+
+def test_outcome_winner_only_when_method_missed():
+    """Published 'by KO' but fight ended by decision -> WINNER_ONLY, no CASH IT."""
+    pub = {"bet": "Luke Riley by KO/TKO", "bet_type": "ko", "predicted_winner": "Luke Riley"}
+    res = {"winner": "Luke Riley", "loser": "Kai Kamaka", "method": "U-DEC", "round": 3, "time": "5:00"}
+    out = livewire.evaluate_published_pick(pub, res)
+    assert out["category"] == "WINNER_ONLY"
+    assert out["bet_won"] is False
+
+
+def test_outcome_loss_on_wrong_winner():
+    pub = {"bet": "Nikita Krylov by KO/TKO", "bet_type": "ko", "predicted_winner": "Nikita Krylov"}
+    res = {"winner": "Robert Whittaker", "loser": "Nikita Krylov", "method": "KO", "round": 1, "time": "3:00"}
+    out = livewire.evaluate_published_pick(pub, res)
+    assert out["category"] == "LOSS"
+
+
+def test_outcome_over_bet_settled_by_duration():
+    """Over 2.5 published; fight ends R1 KO -> the bet LOST even though we might have the winner."""
+    pub = {"bet": "Over 2.5 Rounds", "bet_type": "over", "predicted_winner": ""}
+    res = {"winner": "Damian Pinas", "loser": "Cesar Almeida", "method": "KO", "round": 1, "time": "4:30"}
+    out = livewire.evaluate_published_pick(pub, res)
+    assert out["bet_won"] is False and out["category"] == "LOSS"
+
+
+def test_outcome_over_bet_wins_on_decision():
+    pub = {"bet": "Over 2.5 Rounds", "bet_type": "over", "predicted_winner": ""}
+    res = {"winner": "A", "loser": "B", "method": "U-DEC", "round": 3, "time": "5:00"}
+    out = livewire.evaluate_published_pick(pub, res)
+    assert out["bet_won"] is True and out["category"] == "FULL_WIN"
+
+
+def test_fallback_reaction_never_claims_without_pick():
+    txt = livewire._fallback_reaction("A", "B", "KO", {"category": "NO_PICK"})
+    assert "called" not in txt.lower() and "pick" not in txt.lower()
+
+
+# ---------- ticket surname + pick card helpers (Phases 4-5) ----------
+
+def _load_module(relpath, name):
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), relpath)
+    spec = _ilu2.spec_from_file_location(name, path)
+    mod = _ilu2.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_surname_skips_generational_suffix():
+    tickets = _load_module(os.path.join("modules", "_06b_ticket_generator.py"), "_06b")
+    assert tickets.surname("Kai Kamaka III") == "Kamaka"
+    assert tickets.surname("Luke Riley") == "Riley"
+    assert tickets.surname("Roberto Soldic Jr.") == "Soldic"
+    assert tickets.format_match_name("Luke Riley vs Kai Kamaka III") == "Riley vs Kamaka"
+
+
+def test_scrub_internal_terms():
+    from core.prediction_validate import scrub_internal_terms
+    t = "With a 96.0 ranking proxy and reach. injury_news_flag set. finish_rate_pct 52.9."
+    out = scrub_internal_terms(t)
+    assert "ranking proxy" not in out.lower()
+    assert "injury_news_flag" not in out
+    assert "finish_rate_pct" not in out
+
+
+def test_style_one_liner_exclude():
+    from core.fighter_rating import style_one_liner
+    scout = {"SLpM": "6.9", "Str_Acc": "48%", "SApM": "4.5", "Str_Def": "58%",
+             "TD_Avg": "0.2", "TD_Acc": "40%", "TD_Def": "80%", "Sub_Avg": "0.3"}
+    deep = {"ko_rate": 30, "sub_rate": 5, "wins": 27, "total_fights": 36,
+            "avg_fight_time_sec": 900}
+    tag1 = style_one_liner(scout, deep)
+    tag2 = style_one_liner(scout, deep, exclude=tag1)
+    assert tag1.lower() != tag2.lower()

@@ -277,12 +277,24 @@ def calculate_parlay_odds(slip_data):
             n += 1
     return round(total, 2) if n else 1.0
 
+_NAME_SUFFIXES = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "v"}
+
+
+def surname(full_name):
+    """Last name, skipping generational suffixes ('Kai Kamaka III' -> 'Kamaka',
+    not 'III' — the ticket once printed 'RILEY VS III')."""
+    parts = [p for p in str(full_name or "").strip().split() if p]
+    while parts and parts[-1].lower() in _NAME_SUFFIXES:
+        parts.pop()
+    return parts[-1] if parts else str(full_name or "").strip()
+
+
 def format_match_name(match):
     """Format match for display"""
     if ' vs ' in match:
         fighters = match.split(' vs ')
-        f1 = fighters[0].strip().split()[-1]
-        f2 = fighters[1].strip().split()[-1] if len(fighters) > 1 else ""
+        f1 = surname(fighters[0])
+        f2 = surname(fighters[1]) if len(fighters) > 1 else ""
         return f"{f1} vs {f2}"
     return match[:30]
 
@@ -319,10 +331,13 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
     # ===========================================
     y = 40
     
+    # Responsible-gambling language: no "surefire", no "guaranteed"
+    n_legs = len(slip_data)
+    leg_label = f"{n_legs}-LEG PARLAY" if n_legs > 1 else "SINGLE"
     slip_titles = {
-        "safe": ("SAFE SLIP", "SUREFIRE PARLAY"),
-        "violence": ("VIOLENCE SLIP", "FINISH GUARANTEED"),
-        "value": ("EDGE SLIP", "MODEL PARLAY")
+        "safe": ("SAFE SLIP", f"HIGH-CONFIDENCE {leg_label}"),
+        "violence": ("VIOLENCE SLIP", f"FINISH-FOCUSED {leg_label}"),
+        "value": ("EDGE SLIP", f"MODEL {leg_label}")
     }
     title, subtitle = slip_titles.get(slip_type, slip_titles["safe"])
     
@@ -492,8 +507,9 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
     elif slip_type == "value":
         draw.text((WIDTH//2, banner_y + 17), "MODEL EDGE", font=font_small, fill="#FFD700", anchor="mm")
     else:
-        draw.text((WIDTH//2, banner_y + 17), "CONFIDENCE: MAX", font=font_small, fill="#00FF41", anchor="mm")
-    
+        # "CONFIDENCE: MAX" implied certainty — parlays are never certain
+        draw.text((WIDTH//2, banner_y + 17), "MODEL CONFIDENCE: HIGH", font=font_small, fill="#00FF41", anchor="mm")
+
     # ===========================================
     # FOOTER (GUARANTEED CLEARANCE ON NEW TALL CANVAS)
     # ===========================================
@@ -502,10 +518,12 @@ def render_data_layer(slip_data, slip_type, total_odds, win_amount):
         x = 360 + i * 12
         height = 25 if i % 3 == 0 else 12
         draw.rectangle([(x, barcode_y), (x + 5, barcode_y + height)], fill=(255,255,255,60))
-        
+
     footer_y = barcode_y + 35 # Safe gap below barcode
     draw.text((WIDTH//2, footer_y), "FIGHTIQ", font=font_subtitle, fill=accent, anchor="mt", stroke_width=3, stroke_fill="#000000")
-    
+    draw.text((WIDTH//2, footer_y + 62), "Bet responsibly · 18+ · Not financial advice",
+              font=font_small, fill="#999999", anchor="mt")
+
     return overlay
 
 # ===========================================

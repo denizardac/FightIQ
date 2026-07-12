@@ -35,9 +35,16 @@ except Exception:
 
 RESULTS_FILE = get_data_path("3_results.json")
 LIVE_WIRE_HISTORY = get_data_path("live_wire_history.json")
+PUBLISHED_PICKS_FILE = get_data_path("published_picks.json")
 CARD_FILE = get_data_path("1_card.json")
 LEDGER_FILE = get_data_path("prediction_ledger.json")
 RECAP_FILE = get_data_path("scorecard_ready.json")
+
+try:
+    import core.config as _config
+    MIN_COVERAGE = getattr(_config, "SCORECARD_MIN_COVERAGE", 0.9)
+except Exception:
+    MIN_COVERAGE = 0.9
 
 
 # ==========================================
@@ -89,35 +96,70 @@ def find_prediction_for(result, predictions):
     return None
 
 
-def score_one(result, prediction):
-    """Return a per-fight scorecard row (or None if no matching prediction)."""
+def score_one(result, prediction, published=None):
+    """Return a per-fight scorecard row (or None if no matching prediction).
+
+    HONESTY RULE: the "method too" claim is graded against the PUBLISHED bet
+    (published_picks.json), not the internal prediction. If no method bet was
+    published for the fight, method_correct is False — we can't take credit
+    for a call that never reached Twitter.
+    """
     if not prediction:
         return None
     predicted_winner = prediction.get("winner", "")
     actual_winner = result.get("winner", "")
     winner_correct = _names_match(predicted_winner, actual_winner)
 
-    method_correct = (
-        normalize_method(prediction.get("method")) == normalize_method(result.get("method"))
-    )
+    pub_bet_type = ((published or {}).get("bet_type") or "").lower()
+    if pub_bet_type in ("ko", "sub", "dec"):
+        method_correct = bool(
+            winner_correct
+            and normalize_method(result.get("method")) == pub_bet_type.upper()
+        )
+        published_method = pub_bet_type.upper()
+    else:
+        method_correct = False
+        published_method = None
+
     return {
         "matchup": prediction.get("matchup", f"{result.get('winner')} vs {result.get('loser')}"),
         "predicted_winner": predicted_winner,
         "actual_winner": actual_winner,
         "predicted_method": prediction.get("method", ""),
+        "published_bet": (published or {}).get("bet"),
+        "published_method": published_method,
         "actual_method": result.get("method", ""),
         "confidence": prediction.get("confidence", 0),
         "winner_correct": winner_correct,
-        "method_correct": bool(winner_correct and method_correct),
+        "method_correct": method_correct,
     }
 
 
-def match_results(results, predictions):
+def _published_for_matchup(published, matchup):
+    if not published or " vs " not in (matchup or ""):
+        return None
+    if matchup in published:
+        return published[matchup]
+    a, b = matchup.split(" vs ", 1)
+    for key, rec in published.items():
+        if " vs " not in key:
+            continue
+        ka, kb = key.split(" vs ", 1)
+        if (_names_match(a, ka) and _names_match(b, kb)) or \
+           (_names_match(a, kb) and _names_match(b, ka)):
+            return rec
+    return None
+
+
+def match_results(results, predictions, published=None):
     """Score every actual result against predictions. Returns list of rows."""
     rows = []
     for res in results:
         pred = find_prediction_for(res, predictions)
-        row = score_one(res, pred)
+        if not pred:
+            continue
+        pub = _published_for_matchup(published or {}, pred.get("matchup", ""))
+        row = score_one(res, pred, published=pub)
         if row:
             rows.append(row)
     return rows
@@ -220,8 +262,13 @@ def update_ledger(event_name, rows):
     return ledger, ledger["events"][event_name]
 
 
-def build_recap(event_name, event_entry, all_time):
-    """Build the recap tweet + a highlight thread reply."""
+def build_recap(event_name, event_entry, all_time, card_total=None):
+    """Build the recap tweet + a highlight thread reply.
+
+    Transparency rule: when fewer fights were scored than the card holds,
+    say so explicitly ("11 of 13 fights scored") instead of implying full
+    coverage with a bare "8/10".
+    """
     correct = event_entry["correct"]
     total = event_entry["total"]
     pct = event_entry["pct"]
@@ -229,15 +276,21 @@ def build_recap(event_name, event_entry, all_time):
     at_total = all_time["total"]
     at_pct = all_time.get("pct", 0.0)
 
+    coverage_line = ""
+    if card_total and card_total > total:
+        coverage_line = f"({total} of {card_total} fights scored)\n"
+
     verdict = "🎯" if pct >= 60 else ("📉" if pct < 40 else "📊")
     lead = (
         f"{verdict} FIGHTIQ SCORECARD — {event_name}\n\n"
         f"AI went {correct}/{total} on winners ({pct}%).\n"
+        f"{coverage_line}"
         f"All-time: {at_correct}/{at_total} ({at_pct}%)\n"
         f"#UFC #MMA #FightIQ"
     )[:280]
 
-    # Highlight the best correct calls (highest confidence hits)
+    # Highlight the best correct calls (highest confidence hits).
+    # "(method too)" only appears when the PUBLISHED method bet hit.
     hits = sorted(
         [r for r in event_entry["picks"] if r["winner_correct"]],
         key=lambda r: r.get("confidence", 0),
@@ -247,7 +300,7 @@ def build_recap(event_name, event_entry, all_time):
     if hits:
         lines = ["✅ Called it:"]
         for h in hits:
-            method_tag = " (method too)" if h["method_correct"] else ""
+            method_tag = " (method too)" if h.get("method_correct") else ""
             lines.append(f"• {h['actual_winner']}{method_tag}")
         reply = "\n".join(lines)[:280]
 
@@ -258,9 +311,13 @@ def generate_scorecard(post=False, dry_run=False):
     """Main entry: score the latest event, update ledger, write recap, optionally post."""
     card = _load_json(CARD_FILE, {})
     event_name = card.get("event", "") or "Latest UFC Card"
+    card_total = len(card.get("fights", []) or [])
 
     predictions = load_predictions()
     results = load_results()
+    published = _load_json(PUBLISHED_PICKS_FILE, {})
+    if not isinstance(published, dict):
+        published = {}
 
     if not predictions:
         print("   ℹ️ No predictions found (3_results.json empty) — nothing to score.")
@@ -269,19 +326,21 @@ def generate_scorecard(post=False, dry_run=False):
         print("   ℹ️ No fight results yet (live_wire_history.json empty) — nothing to score.")
         return None
 
-    rows = match_results(results, predictions)
+    rows = match_results(results, predictions, published=published)
     if not rows:
         print("   ⚠️ No results matched any prediction (name mismatch?).")
         return None
 
     ledger, event_entry = update_ledger(event_name, rows)
     stats = accuracy_stats(rows)
+    coverage = (stats["total"] / card_total) if card_total else 1.0
     print(f"   📊 {event_name}: {stats['correct']}/{stats['total']} winners "
-          f"({stats['pct']}%), method {stats['method_correct']}/{stats['total']}")
+          f"({stats['pct']}%), method {stats['method_correct']}/{stats['total']} "
+          f"| coverage {stats['total']}/{card_total or '?'}")
     print(f"   🏆 All-time: {ledger['all_time']['correct']}/{ledger['all_time']['total']} "
           f"({ledger['all_time'].get('pct', 0.0)}%)")
 
-    lead, reply = build_recap(event_name, event_entry, ledger["all_time"])
+    lead, reply = build_recap(event_name, event_entry, ledger["all_time"], card_total=card_total)
 
     recap_payload = {
         "event": event_name,
@@ -289,6 +348,8 @@ def generate_scorecard(post=False, dry_run=False):
         "lead": lead,
         "reply": reply,
         "stats": stats,
+        "coverage": round(coverage, 3),
+        "card_total": card_total,
         "all_time": ledger["all_time"],
     }
     with open(RECAP_FILE, "w", encoding="utf-8") as f:
@@ -296,7 +357,13 @@ def generate_scorecard(post=False, dry_run=False):
     print(f"   📁 Recap saved to {RECAP_FILE}")
 
     if post or dry_run:
-        _post_recap(event_name, lead, reply, ledger, event_entry, dry_run=dry_run)
+        # Coverage gate: don't publish a recap that silently skips a chunk
+        # of the card (e.g. the old 8h window missing the whole main card).
+        if card_total and coverage < MIN_COVERAGE:
+            print(f"   ⏸️ Recap NOT posted: only {stats['total']}/{card_total} fights scored "
+                  f"(<{int(MIN_COVERAGE * 100)}% coverage). Run again when more results are in.")
+        else:
+            _post_recap(event_name, lead, reply, ledger, event_entry, dry_run=dry_run)
 
     return recap_payload
 

@@ -89,7 +89,12 @@ ORACLE_PREFER_TRENDING = True       # Prioritize trending fighters
 # ==========================================
 
 LIVE_WIRE_POLL_INTERVAL = 60       # Seconds between checks in continuous mode
-LIVE_WIRE_MAX_RUNTIME_HOURS = 8    # --auto mode stops after this many hours
+# 18:00 UTC start + 12h = 06:00 UTC — covers the MAIN EVENT (the old 8h window
+# closed at 02:00, before the main card finished, so headliners were never
+# reacted to or scored). Loop also exits early once every fight has a result.
+LIVE_WIRE_MAX_RUNTIME_HOURS = 12
+# Scorecard recap only posts when at least this share of the card is scored
+SCORECARD_MIN_COVERAGE = 0.9
 SPOTLIGHT_HISTORY_DAYS = 90        # Days to look back for content history
 
 # ==========================================

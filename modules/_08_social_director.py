@@ -1,10 +1,11 @@
+import hashlib
 import json
 import os
 import time
 import sys
 import random
 import argparse
-from datetime import datetime
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 # Windows console UTF-8 (emoji in prints) — missing here while every other
@@ -43,6 +44,8 @@ FILES = {
     "visuals": VISUALS_DIR,
     "spotlight": get_data_path("spotlight_ready.json"),
     "spotlight_history": get_data_path("spotlight_history.json"),
+    "published_picks": get_data_path("published_picks.json"),
+    "content_hashes": get_data_path("content_hashes.json"),
 }
 
 
@@ -144,6 +147,86 @@ class SocialDirector:
         print(f"   ⏳ Pre-post warmup {wait}s (reduces error 226)...")
         time.sleep(wait)
 
+    # ── Published-pick ledger: the single source of truth for what the bot
+    #    actually CLAIMED on Twitter. Live Wire and the Scorecard may only
+    #    reference picks recorded here. ──────────────────────────────────
+    def _record_published_pick(self, item, tweet_id, card_published):
+        if self.dry_run:
+            print("  [DRY-RUN] Would record published pick")
+            return
+        try:
+            picks = {}
+            if os.path.exists(FILES["published_picks"]):
+                with open(FILES["published_picks"], "r", encoding="utf-8") as f:
+                    loaded = json.load(f)
+                    if isinstance(loaded, dict):
+                        picks = loaded
+            matchup = item.get("matchup", "")
+            brain = item.get("fight_brain_output", {}) or {}
+            pred = brain.get("prediction", {}) or {}
+            mc = brain.get("market_context", {}) or {}
+            picks[matchup] = {
+                "bet": mc.get("canonical_bet", ""),
+                "bet_type": mc.get("canonical_bet_type", "ml"),
+                "odds": mc.get("canonical_odds"),
+                "odds_available": bool(mc.get("canonical_odds_available")),
+                "odds_source": mc.get("odds_source", "unknown"),
+                "predicted_winner": pred.get("winner", ""),
+                "predicted_method": pred.get("method", ""),
+                # Confidence counts as published ONLY when the Pick card
+                # (which displays it) actually went out with the tweet.
+                "confidence": pred.get("confidence") if card_published else None,
+                "card_published": bool(card_published),
+                "tweet_id": str(tweet_id),
+                "published_at": datetime.now().isoformat(),
+            }
+            with open(FILES["published_picks"], "w", encoding="utf-8") as f:
+                json.dump(picks, f, indent=2, ensure_ascii=False)
+        except Exception as e:
+            print(f"   ⚠️ Could not record published pick: {e}")
+
+    # ── Duplicate-content lock: the same spotlight text must never be posted
+    #    twice within a week (the Hinkle/Issa tweet went out 17 days in a row). ──
+    def _content_hash(self, text):
+        return hashlib.sha256((text or "").strip().lower().encode("utf-8")).hexdigest()[:16]
+
+    def _is_duplicate_content(self, text, window_days=7):
+        h = self._content_hash(text)
+        try:
+            if os.path.exists(FILES["content_hashes"]):
+                with open(FILES["content_hashes"], "r") as f:
+                    hashes = json.load(f)
+                seen = hashes.get(h)
+                if seen:
+                    seen_dt = datetime.strptime(seen, "%Y-%m-%d")
+                    if datetime.today() - seen_dt < timedelta(days=window_days):
+                        return True
+        except Exception:
+            pass
+        return False
+
+    def _remember_content(self, text, keep_days=30):
+        if self.dry_run:
+            return
+        h = self._content_hash(text)
+        hashes = {}
+        try:
+            if os.path.exists(FILES["content_hashes"]):
+                with open(FILES["content_hashes"], "r") as f:
+                    hashes = json.load(f)
+        except Exception:
+            hashes = {}
+        hashes[h] = datetime.today().strftime("%Y-%m-%d")
+        # prune old entries
+        cutoff = datetime.today() - timedelta(days=keep_days)
+        hashes = {k: v for k, v in hashes.items()
+                  if datetime.strptime(v, "%Y-%m-%d") >= cutoff}
+        try:
+            with open(FILES["content_hashes"], "w") as f:
+                json.dump(hashes, f, indent=2)
+        except Exception as e:
+            print(f"   ⚠️ Could not save content hash: {e}")
+
     def find_image(self, f1, f2, visual_type="Versus"):
         # Uses the SAME canonical sanitizer as the visual engine (core.naming)
         safe_f1 = safe_filename(f1)
@@ -166,6 +249,13 @@ class SocialDirector:
         if visual_type == "Radar":
             for s1, s2 in [(safe_f1, safe_f2), (safe_f2, safe_f1)]:
                 p = os.path.join(FILES["visuals"], f"Radar_{s1}_vs_{s2}.png")
+                if os.path.exists(p):
+                    return p
+            return None
+
+        if visual_type == "Pick":
+            for s1, s2 in [(safe_f1, safe_f2), (safe_f2, safe_f1)]:
+                p = os.path.join(FILES["visuals"], f"Pick_{s1}_vs_{s2}.png")
                 if os.path.exists(p):
                     return p
             return None
@@ -241,6 +331,12 @@ class SocialDirector:
             if not thread_texts and data.get("tweet"):
                 thread_texts = [data["tweet"]]
 
+            # Second safety net against repeat-content (beyond the 20h file-age
+            # guard): identical spotlight text within 7 days is never re-posted.
+            if thread_texts and self._is_duplicate_content(thread_texts[0]):
+                print("   ⏭️ Duplicate spotlight content (posted within 7 days) — skipping.")
+                return True
+
             media_file = self._resolve_media_path(data.get("visual_path"))
             if not media_file:
                 print(f"❌ Spotlight image missing: {data.get('visual_path')}")
@@ -264,6 +360,7 @@ class SocialDirector:
 
             self.save_history(self._done_id(uid))
             self._mark_spotlight_history(data.get("fighter"))
+            self._remember_content(thread_texts[0])
             return True
 
         except Exception as e:
@@ -288,12 +385,14 @@ class SocialDirector:
             odds_vals = [x.get("odds") for x in slip_data if x.get("pick")][:max_legs]
             total = combined_odds(slip_data[:max_legs])
 
+            n_legs = len(picks)
             if slip_type == "safe":
                 intro = "💰 SAFE SLIP — High-confidence plays.\n"
             elif slip_type == "violence":
                 intro = "🩸 VIOLENCE SLIP — Finish-focused card.\n"
             else:
-                intro = "💎 EDGE SLIP — Model-backed 3-leg parlay.\n"
+                leg_word = f"{n_legs}-leg parlay" if n_legs > 1 else "single"
+                intro = f"💎 EDGE SLIP — Model-backed {leg_word}.\n"
 
             lines = []
             for i, pick in enumerate(picks):
@@ -382,13 +481,28 @@ class SocialDirector:
             else:
                 text = brain.get("content_tweets", {}).get(t_type, "")
             if not text:
+                # e.g. betting_tweet intentionally blank when no priced pick
                 continue
             f1, f2 = match.split(" vs ", 1)
-            media = self.find_image(f1, f2, "Versus") or self.find_image(f1, f2, "Card")
+
+            if t_type == "betting_tweet":
+                # Prediction visual (AI Pick card) leads; Versus stats card second.
+                pick_img = self.find_image(f1, f2, "Pick")
+                versus_img = self.find_image(f1, f2, "Versus")
+                media = [m for m in (pick_img, versus_img) if m] or \
+                    self.find_image(f1, f2, "Card")
+            else:
+                pick_img = None
+                media = self.find_image(f1, f2, "Versus") or self.find_image(f1, f2, "Card")
 
             if count == 0:
                 self._warmup_before_session()
-            if self.post_tweet(text, media):
+            tweet_id = self.post_tweet(text, media)
+            if tweet_id:
+                if t_type == "betting_tweet":
+                    # Ledger of what we ACTUALLY claimed — Live Wire and the
+                    # Scorecard may only reference picks recorded here.
+                    self._record_published_pick(item, tweet_id, card_published=bool(pick_img))
                 self.save_history(self._done_id(uid))
                 count += 1
                 if not self.dry_run:
