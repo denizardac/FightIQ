@@ -148,7 +148,10 @@ def _decimal_for_fighter(pick_text, f1, f2, ml_flat):
 def _enrich_odds(pick_text, matchup, ai_odds, markets_by_matchup, bet_type="ml", winner="", method="Dec"):
     key = _norm_matchup_key(matchup)
     if not key or " vs " not in matchup:
-        return _odds_to_decimal(ai_odds)
+        # No matchup to resolve against the board -> we can't verify this
+        # price. "Only verified priced legs" means an unresolvable leg drops
+        # rather than passing an unchecked AI number straight through.
+        return None
     f1, f2 = matchup.split(" vs ", 1)
     md = markets_by_matchup.get(key) or {}
     dec, _, ok = resolve_pick_odds(

@@ -824,7 +824,11 @@ def main():
             for name in candidates[:20]:
                 d = scrape_fighter_detailed(urls.get(name))
                 if d and d.get('wins', 0) > 15:
-                    ai_content = generate_anomaly_content(d, {"name": "The Field"}, "2.5+", f"Veteran with {d['wins']} wins - always a value bet")
+                    # HONESTY RULE: no real price here — pass the statistical
+                    # sentinel (not a fake "2.5+" odd) so the content stays
+                    # analysis-only. "always a value bet" implied a priced edge
+                    # that never existed.
+                    ai_content = generate_anomaly_content(d, {"name": "The Field"}, "N/A (Statistical)", f"Proven veteran with {d['wins']} career wins")
                     selected_data = d
                     break
 
