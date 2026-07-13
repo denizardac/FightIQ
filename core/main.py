@@ -4,6 +4,7 @@ import sys
 import os
 import json
 import logging
+import threading
 from logging.handlers import RotatingFileHandler
 from datetime import datetime
 
@@ -24,6 +25,18 @@ PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MODULES_DIR = os.path.join(PROJECT_ROOT, "modules")
 DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 LOGS_DIR = os.path.join(PROJECT_ROOT, "logs")
+
+# Ensure project root is importable even when launched as `python core/main.py`
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+# Per-module subprocess timeout (falls back to a safe default if config is
+# unavailable, e.g. a partial checkout).
+try:
+    from core import config
+    MODULE_TIMEOUT_SECONDS = config.MODULE_TIMEOUT_SECONDS
+except Exception:
+    MODULE_TIMEOUT_SECONDS = int(os.environ.get("MODULE_TIMEOUT_SECONDS", "1800"))
 
 # ==========================================
 # STRUCTURED LOGGING SETUP
@@ -104,14 +117,47 @@ def run_module(script_name):
         encoding="utf-8",
         errors="replace",
     )
-    for line in process.stdout:
-        line = line.rstrip()
-        if line:
-            logger.info(f"[{script_name}] {line}")
-    process.wait()
+
+    # Watchdog: a stalled stage (half-open TLS, a genai stream that never
+    # closes) would otherwise freeze the orchestrator forever. Kill it so the
+    # run can fail cleanly instead of letting the next cron tick stack a
+    # duplicate process.
+    timed_out = threading.Event()
+
+    def _kill_on_timeout():
+        timed_out.set()
+        logger.error(
+            f"TIMEOUT: {script_name} exceeded {MODULE_TIMEOUT_SECONDS}s — killing"
+        )
+        try:
+            process.kill()
+        except Exception:
+            pass
+
+    watchdog = threading.Timer(MODULE_TIMEOUT_SECONDS, _kill_on_timeout)
+    watchdog.start()
+    try:
+        for line in process.stdout:
+            line = line.rstrip()
+            if line:
+                logger.info(f"[{script_name}] {line}")
+        process.wait()
+    finally:
+        watchdog.cancel()
+
     result = process
     duration = round(time.time() - start, 2)
-    
+
+    if timed_out.is_set():
+        logger.error(f"FAILURE: {script_name} timed out after {duration}s")
+        PIPELINE_REPORT["modules"][script_name] = {
+            "status": "FAILED",
+            "error": f"Timeout after {MODULE_TIMEOUT_SECONDS}s",
+            "duration_seconds": duration,
+            "exit_code": result.returncode,
+        }
+        return False
+
     if result.returncode == 0:
         logger.info(f"SUCCESS: {script_name} completed in {duration}s")
         # Track in pipeline report

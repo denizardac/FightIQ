@@ -1,13 +1,7 @@
 """
 Shared parlay selection helpers — used by parlay_maker and social_director.
 """
-import re
-
 import core.config as config
-
-
-def _norm_name(name: str) -> str:
-    return re.sub(r"[^a-z0-9]", "", (name or "").lower())
 
 
 def pick_matches_winner(pick_text: str, winner: str, f1: str, f2: str) -> bool:

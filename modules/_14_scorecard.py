@@ -27,6 +27,7 @@ from datetime import datetime
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path
+from core.name_match import names_match as _names_match, norm_name as _norm_name
 
 try:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -65,23 +66,6 @@ def normalize_method(method_str):
     if any(t in m for t in ("dec", "decision")):
         return "DEC"
     return "OTHER"
-
-
-def _norm_name(name):
-    return "".join(ch for ch in str(name or "").lower() if ch.isalnum() or ch == " ").strip()
-
-
-def _names_match(a, b):
-    """True if two fighter names refer to the same person (last-name tolerant)."""
-    na, nb = _norm_name(a), _norm_name(b)
-    if not na or not nb:
-        return False
-    if na == nb or na in nb or nb in na:
-        return True
-    pa = [p for p in na.split() if len(p) > 2]
-    pb = [p for p in nb.split() if len(p) > 2]
-    # Share the (usually distinctive) last token
-    return bool(pa and pb and pa[-1] == pb[-1])
 
 
 def find_prediction_for(result, predictions):

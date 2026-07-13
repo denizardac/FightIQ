@@ -197,7 +197,14 @@ def analyze_matchup(fight_data):
     if not active_model:
         active_model = get_working_model()
 
-    f1, f2 = fight_data['fighters']
+    # Guard: a malformed card entry (missing 'fighters' or not exactly two)
+    # must not raise here — the caller checks for a falsy return and skips
+    # this one fight instead of crashing the whole stage.
+    fighters = fight_data.get('fighters') if isinstance(fight_data, dict) else None
+    if not isinstance(fighters, (list, tuple)) or len(fighters) != 2:
+        print(f"   ⚠️ Skipping malformed fight entry (fighters={fighters!r})")
+        return None
+    f1, f2 = fighters
     stats    = fight_data.get('stats', [{}, {}])
     deep     = fight_data.get('deep_stats', [{}, {}])
     market   = fight_data.get('market_data', {})
@@ -413,7 +420,12 @@ def main():
     
     required_fields = ['prediction', 'violence_score']
     for i, fight in enumerate(fights):
-        matchup_name = f"{fight['fighters'][0]} vs {fight['fighters'][1]}"
+        _fighters = fight.get('fighters') if isinstance(fight, dict) else None
+        if not isinstance(_fighters, (list, tuple)) or len(_fighters) != 2:
+            print(f"   ⚠️ Skipping malformed fight entry #{i} (fighters={_fighters!r})")
+            failed_fights.append(f"malformed#{i}")
+            continue
+        matchup_name = f"{_fighters[0]} vs {_fighters[1]}"
 
         def _valid(o):
             return bool(o) and all(field in o for field in required_fields)

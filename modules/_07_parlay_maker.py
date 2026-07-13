@@ -1,13 +1,12 @@
 import json
 import os
-import re
 import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import core.config as config
 from core.paths import get_data_path
 from core.pipeline_meta import stamp_stage
-from core.odds_converter import american_to_decimal
+from core.market_catalog import to_decimal as _odds_to_decimal
 from core.odds_resolve import resolve_pick_odds
 from core.parlay_logic import (
     pick_matches_winner,
@@ -44,46 +43,6 @@ def _to_conf_int(v):
     if isinstance(v, str) and v.strip().isdigit():
         return int(v.strip())
     return 0
-
-
-def _odds_to_decimal(val):
-    if val is None or val == "" or val == 0:
-        return None
-    if isinstance(val, dict):
-        if "decimal" in val and val["decimal"] is not None:
-            try:
-                return round(float(val["decimal"]), 2)
-            except (TypeError, ValueError):
-                pass
-        if "american" in val and val["american"] is not None:
-            try:
-                return american_to_decimal(str(val["american"]).replace("+", ""))
-            except Exception:
-                pass
-        return None
-    if isinstance(val, str):
-        s = val.strip().replace(",", ".")
-        if s.startswith(("+", "-")) and re.match(r"^[+-]\d{3,}$", s):
-            try:
-                return american_to_decimal(s)
-            except Exception:
-                pass
-        try:
-            return round(float(s), 2)
-        except ValueError:
-            return None
-    try:
-        fv = float(val)
-        if fv > 50:
-            try:
-                return american_to_decimal(int(fv))
-            except Exception:
-                pass
-        if 1.01 <= fv <= 100:
-            return round(fv, 2)
-    except (TypeError, ValueError):
-        pass
-    return None
 
 
 def _load_markets_by_matchup():

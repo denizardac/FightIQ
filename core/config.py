@@ -170,6 +170,11 @@ FONT_PATHS = {
 # event) aborts the pipeline instead of publishing content for the wrong card.
 PIPELINE_STAGE_MAX_AGE_HOURS = 36
 
+# Per-module subprocess wall-clock cap. A stage that stalls (half-open TLS,
+# a genai stream that never closes) is killed instead of freezing the whole
+# orchestrator indefinitely and letting the next cron tick stack a duplicate.
+MODULE_TIMEOUT_SECONDS = int(os.environ.get("MODULE_TIMEOUT_SECONDS", "1800"))  # 30 min
+
 # posted_history.json cap — oldest entries pruned beyond this
 POSTED_HISTORY_MAX_ENTRIES = 400
 

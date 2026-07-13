@@ -331,6 +331,12 @@ class SocialDirector:
             if not thread_texts and data.get("tweet"):
                 thread_texts = [data["tweet"]]
 
+            # Nothing to post is not a failure — an empty thread/tweet must not
+            # be reported as a posting error (which would fail the whole agenda).
+            if not thread_texts:
+                print("   ⏭️ Spotlight has no thread/tweet text — nothing to post.")
+                return True
+
             # Second safety net against repeat-content (beyond the 20h file-age
             # guard): identical spotlight text within 7 days is never re-posted.
             if thread_texts and self._is_duplicate_content(thread_texts[0]):

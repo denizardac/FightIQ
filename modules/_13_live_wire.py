@@ -4,7 +4,13 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
+
+
+def _utc_now():
+    """Wall clock in UTC — the whole design (cron windows, day boundaries) is
+    expressed in UTC, so naive local time would drift on non-UTC hosts."""
+    return datetime.now(timezone.utc)
 
 import requests
 from bs4 import BeautifulSoup
@@ -18,6 +24,7 @@ from google import genai
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from core.paths import get_data_path, PROJECT_ROOT
 from core.ufcstats_http import fetch as ufcstats_fetch
+from core.name_match import names_match as _names_match, norm_name as _norm_name
 
 try:
     from modules import _08_social_director as SocialDirector
@@ -87,7 +94,7 @@ def is_fight_night(card=None):
         event_day = datetime.strptime(date_str[:10], "%Y-%m-%d").date()
     except ValueError:
         return False
-    today = datetime.now().date()
+    today = _utc_now().date()
     # Also allow day-after for cards that run past midnight UTC
     return today in (event_day, event_day + timedelta(days=1))
 
@@ -193,21 +200,6 @@ def _parse_fight_row(row):
 # TWEETED (recorded in published_picks.json by the Social Director).
 # Internal predictions that never reached Twitter are not claimable.
 # ==========================================
-
-def _norm_name(name):
-    return "".join(ch for ch in str(name or "").lower() if ch.isalnum() or ch == " ").strip()
-
-
-def _names_match(a, b):
-    na, nb = _norm_name(a), _norm_name(b)
-    if not na or not nb:
-        return False
-    if na == nb or na in nb or nb in na:
-        return True
-    pa = [p for p in na.split() if len(p) > 2]
-    pb = [p for p in nb.split() if len(p) > 2]
-    return bool(pa and pb and pa[-1] == pb[-1])
-
 
 def load_published_picks():
     if not os.path.exists(PUBLISHED_PICKS_FILE):
@@ -506,7 +498,7 @@ def run_live_wire_once():
                 "bet_won": outcome["bet_won"],
                 "reaction": reaction,
                 "tweet_id": str(tweet_id),
-                "timestamp": datetime.now().isoformat(),
+                "timestamp": _utc_now().isoformat(),
             }
             save_history(history)
             posted += 1
@@ -530,9 +522,9 @@ def run_live_wire_continuous():
     print("=" * 60)
 
     total_fights = len(card.get("fights", [])) or 99
-    deadline = datetime.now() + timedelta(hours=MAX_RUNTIME_HOURS)
+    deadline = _utc_now() + timedelta(hours=MAX_RUNTIME_HOURS)
     try:
-        while datetime.now() < deadline:
+        while _utc_now() < deadline:
             _, finished = run_live_wire_once()
             if finished >= total_fights:
                 print(f"\n🏁 All {total_fights} fights have results — ending early.")
@@ -582,7 +574,7 @@ def main():
     if args.auto:
         if not args.force and not is_fight_night():
             print("   ⏭️ Not fight night — cron should only run Sat/Sun on card date.")
-            print(f"   Today: {datetime.now().date()} | Card date: {load_card().get('date')}")
+            print(f"   Today (UTC): {_utc_now().date()} | Card date: {load_card().get('date')}")
             return
         run_live_wire_continuous()
         return

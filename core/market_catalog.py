@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import List, Optional
 
 from core.odds_converter import american_to_decimal
+from core.name_match import name_in as _name_in
 
 
 def to_decimal(val) -> Optional[float]:
@@ -66,16 +67,6 @@ def _safe_rate(val) -> float:
         return float(val)
     except (TypeError, ValueError):
         return 0.0
-
-
-def _name_in(text: str, fighter: str) -> bool:
-    if not text or not fighter:
-        return False
-    t, f = text.lower(), fighter.lower()
-    if f in t or t in f:
-        return True
-    parts = [p for p in f.split() if len(p) > 2]
-    return bool(parts) and parts[-1] in t
 
 
 def _classify_bet_type(label: str, market: str) -> str:

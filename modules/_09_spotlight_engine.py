@@ -87,11 +87,23 @@ def generate_with_retry(client, model_name, prompt):
 def load_history():
     if not os.path.exists(HISTORY_FILE): return []
     try:
-        with open(HISTORY_FILE, "r") as f: 
+        with open(HISTORY_FILE, "r") as f:
             data = json.load(f)
-            ninety_days_ago = datetime.now() - timedelta(days=config.SPOTLIGHT_HISTORY_DAYS)
-            return [x for x in data if datetime.strptime(x['date'], "%Y-%m-%d") > ninety_days_ago]
-    except Exception: return []
+    except Exception:
+        return []
+
+    cutoff = datetime.now() - timedelta(days=config.SPOTLIGHT_HISTORY_DAYS)
+    kept = []
+    for x in data:
+        # A single malformed row (missing/bad 'date') must NOT wipe the whole
+        # de-dup history — that would let a recently-featured fighter be
+        # re-posted. Skip only the bad row.
+        try:
+            if datetime.strptime(x['date'], "%Y-%m-%d") > cutoff:
+                kept.append(x)
+        except (KeyError, ValueError, TypeError):
+            continue
+    return kept
 
 def load_db():
     try:

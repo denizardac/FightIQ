@@ -7,20 +7,11 @@ from typing import Optional, Tuple
 
 from core.market_catalog import catalog_bets, to_decimal, format_bet_label
 from core.numeric_safe import safe_float
+from core.name_match import name_in as _name_in
 
 
 def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", (s or "").lower().strip())
-
-
-def _name_in(text: str, fighter: str) -> bool:
-    if not text or not fighter:
-        return False
-    t, f = _norm(text), _norm(fighter)
-    if f in t or t in f:
-        return True
-    parts = [p for p in f.split() if len(p) > 2]
-    return bool(parts) and parts[-1] in t
 
 
 def winner_ml_odds(market_data: dict, f1: str, f2: str, winner: str) -> Optional[float]:
